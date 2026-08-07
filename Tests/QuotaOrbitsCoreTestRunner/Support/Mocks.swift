@@ -1,5 +1,5 @@
 import Foundation
-import QuotaOrbitsCore
+@_spi(Testing) import QuotaOrbitsCore
 
 struct ScriptedSentMessage: Equatable, Sendable {
     let method: String?
@@ -179,20 +179,8 @@ actor DelayingJSONLineTransport: JSONLineTransport {
     }
 }
 
-enum FixtureQuotaFetchError: SafeQuotaFetchError {
-    case fixture(String, FailureCategory = .transport)
-
-    var safeMessage: String {
-        switch self {
-        case let .fixture(message, _): return message
-        }
-    }
-
-    var failureCategory: FailureCategory {
-        switch self {
-        case let .fixture(_, category): return category
-        }
-    }
+enum FixtureQuotaFetchError: Error, Sendable {
+    case fixture(String)
 }
 
 actor SequencedClaudeSource: ClaudeQuotaFetching {
@@ -294,6 +282,73 @@ actor BlockingClaudeSource: ClaudeQuotaFetching {
     func release() {
         releaseContinuation?.resume()
         releaseContinuation = nil
+    }
+}
+
+actor NonCancellableClaudeSource: ClaudeQuotaFetching {
+    private var continuation: CheckedContinuation<[ClaudeAccountQuota], Error>?
+    private var startWaiters: [CheckedContinuation<Void, Never>] = []
+    private(set) var fetchCount = 0
+
+    func fetch() async throws -> [ClaudeAccountQuota] {
+        fetchCount += 1
+        let waiters = startWaiters
+        startWaiters.removeAll()
+        waiters.forEach { $0.resume() }
+        return try await withCheckedThrowingContinuation { continuation in
+            self.continuation = continuation
+        }
+    }
+
+    func waitUntilFetchStarted() async {
+        if fetchCount > 0 { return }
+        await withCheckedContinuation { continuation in
+            startWaiters.append(continuation)
+        }
+    }
+}
+
+actor ManualRefreshTimeoutScheduler: RefreshTimeoutScheduling {
+    private var nextID = 0
+    private var waiters: [Int: (SourceKind, CheckedContinuation<Void, Error>)] = [:]
+    private var scheduleWaiters: [
+        (SourceKind, CheckedContinuation<Void, Never>)
+    ] = []
+
+    func wait(for duration: Duration, source: SourceKind) async throws {
+        nextID += 1
+        let id = nextID
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                waiters[id] = (source, continuation)
+                resumeScheduleWaiters(for: source)
+            }
+        } onCancel: {
+            Task { await self.cancel(id: id) }
+        }
+    }
+
+    func waitUntilScheduled(for source: SourceKind) async {
+        if waiters.values.contains(where: { $0.0 == source }) { return }
+        await withCheckedContinuation { continuation in
+            scheduleWaiters.append((source, continuation))
+        }
+    }
+
+    func fire(_ source: SourceKind) {
+        let matching = waiters.filter { $0.value.0 == source }
+        matching.keys.forEach { waiters.removeValue(forKey: $0) }
+        matching.values.forEach { $0.1.resume(returning: ()) }
+    }
+
+    private func cancel(id: Int) {
+        waiters.removeValue(forKey: id)?.1.resume(throwing: CancellationError())
+    }
+
+    private func resumeScheduleWaiters(for source: SourceKind) {
+        let ready = scheduleWaiters.filter { $0.0 == source }
+        scheduleWaiters.removeAll { $0.0 == source }
+        ready.forEach { $0.1.resume() }
     }
 }
 

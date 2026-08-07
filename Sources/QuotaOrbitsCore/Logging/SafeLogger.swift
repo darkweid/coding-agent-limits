@@ -13,11 +13,6 @@ public enum FailureCategory: String, Sendable {
     case invalidResponse
 }
 
-public protocol SafeQuotaFetchError: Error {
-    var safeMessage: String { get }
-    var failureCategory: FailureCategory { get }
-}
-
 public enum SafeLogger {
     private static let logger = Logger(
         subsystem: "com.quota-orbits.app",

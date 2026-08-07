@@ -6,16 +6,17 @@ public final class QuotaRefreshCoordinator: ObservableObject {
     @Published public private(set) var snapshot = QuotaSnapshot.initial
     public private(set) var isRefreshing = false
 
-    private let claude: any ClaudeQuotaFetching
-    private let codex: any CodexQuotaFetching
+    private let claudeGate: SourceFetchGate<[ClaudeAccountQuota]>
+    private let codexGate: SourceFetchGate<CodexQuota>
     private let ticker: any RefreshTicking
     private let now: @Sendable () -> Date
     private let refreshInterval: Duration
     private let timeout: Duration
+    private let timeoutScheduler: any RefreshTimeoutScheduling
     private var tickerTask: Task<Void, Never>?
     private var isAwaitingInitialTick = false
 
-    public init(
+    public convenience init(
         claude: any ClaudeQuotaFetching,
         codex: any CodexQuotaFetching,
         ticker: any RefreshTicking = MinuteTicker(),
@@ -23,12 +24,40 @@ public final class QuotaRefreshCoordinator: ObservableObject {
         refreshInterval: Duration = .seconds(60),
         timeout: Duration = .seconds(10)
     ) {
-        self.claude = claude
-        self.codex = codex
+        self.init(
+            claude: claude,
+            codex: codex,
+            ticker: ticker,
+            now: now,
+            refreshInterval: refreshInterval,
+            timeout: timeout,
+            timeoutScheduler: ContinuousRefreshTimeoutScheduler()
+        )
+    }
+
+    @_spi(Testing)
+    public init(
+        claude: any ClaudeQuotaFetching,
+        codex: any CodexQuotaFetching,
+        ticker: any RefreshTicking,
+        now: @escaping @Sendable () -> Date,
+        refreshInterval: Duration = .seconds(60),
+        timeout: Duration = .seconds(10),
+        timeoutScheduler: any RefreshTimeoutScheduling
+    ) {
+        self.claudeGate = SourceFetchGate(
+            source: .claude,
+            operation: { try await claude.fetch() }
+        )
+        self.codexGate = SourceFetchGate(
+            source: .codex,
+            operation: { try await codex.fetch() }
+        )
         self.ticker = ticker
         self.now = now
         self.refreshInterval = refreshInterval
         self.timeout = timeout
+        self.timeoutScheduler = timeoutScheduler
     }
 
     public func start() {
@@ -58,25 +87,24 @@ public final class QuotaRefreshCoordinator: ObservableObject {
         defer { isRefreshing = false }
 
         await withTaskGroup(of: CompletedFetch.self) { group in
-            let claude = self.claude
-            let codex = self.codex
+            let claudeGate = self.claudeGate
+            let codexGate = self.codexGate
             let timeout = self.timeout
+            let timeoutScheduler = self.timeoutScheduler
 
             group.addTask {
                 .claude(
-                    await Self.fetch(
-                        source: .claude,
+                    await claudeGate.fetch(
                         timeout: timeout,
-                        operation: { try await claude.fetch() }
+                        timeoutScheduler: timeoutScheduler
                     )
                 )
             }
             group.addTask {
                 .codex(
-                    await Self.fetch(
-                        source: .codex,
+                    await codexGate.fetch(
                         timeout: timeout,
-                        operation: { try await codex.fetch() }
+                        timeoutScheduler: timeoutScheduler
                     )
                 )
             }
@@ -148,76 +176,6 @@ public final class QuotaRefreshCoordinator: ObservableObject {
             return .unavailable(message: failure.message)
         }
     }
-
-    nonisolated private static func fetch<Value: Sendable>(
-        source: SourceKind,
-        timeout: Duration,
-        operation: @escaping @Sendable () async throws -> Value
-    ) async -> Result<Value, FetchFailure> {
-        await withTaskGroup(of: FetchRace<Value>.self) { group in
-            group.addTask {
-                do {
-                    return .completed(.success(try await operation()))
-                } catch {
-                    return .completed(.failure(sanitize(error, source: source)))
-                }
-            }
-            group.addTask {
-                do {
-                    try await Task.sleep(for: timeout)
-                    return .timedOut
-                } catch {
-                    return .cancelled
-                }
-            }
-
-            guard let first = await group.next() else {
-                return .failure(defaultFailure(for: source))
-            }
-            group.cancelAll()
-            switch first {
-            case let .completed(result): return result
-            case .timedOut:
-                return .failure(
-                    FetchFailure(message: "Request timed out.", category: .timeout)
-                )
-            case .cancelled:
-                return .failure(defaultFailure(for: source))
-            }
-        }
-    }
-
-    nonisolated private static func sanitize(
-        _ error: Error,
-        source: SourceKind
-    ) -> FetchFailure {
-        guard let safeError = error as? any SafeQuotaFetchError,
-              !safeError.safeMessage.isEmpty
-        else {
-            return defaultFailure(for: source)
-        }
-        return FetchFailure(
-            message: safeError.safeMessage,
-            category: safeError.failureCategory
-        )
-    }
-
-    nonisolated private static func defaultFailure(
-        for source: SourceKind
-    ) -> FetchFailure {
-        switch source {
-        case .claude:
-            return FetchFailure(
-                message: "Claude quota unavailable.",
-                category: .transport
-            )
-        case .codex:
-            return FetchFailure(
-                message: "Codex quota unavailable.",
-                category: .transport
-            )
-        }
-    }
 }
 
 private struct FetchFailure: Error, Sendable {
@@ -230,82 +188,170 @@ private enum CompletedFetch: Sendable {
     case codex(Result<CodexQuota, FetchFailure>)
 }
 
-private enum FetchRace<Value: Sendable>: Sendable {
-    case completed(Result<Value, FetchFailure>)
-    case timedOut
-    case cancelled
+private actor SourceFetchGate<Value: Sendable> {
+    private struct InFlight {
+        let id: Int
+        let task: Task<Result<Value, FetchFailure>, Never>
+    }
+
+    private struct Waiter {
+        let id: Int
+        let continuation: CheckedContinuation<Result<Value, FetchFailure>, Never>
+        let timeoutTask: Task<Void, Never>
+    }
+
+    private let source: SourceKind
+    private let operation: @Sendable () async throws -> Value
+    private var nextID = 0
+    private var inFlight: InFlight?
+    private var waiter: Waiter?
+
+    init(
+        source: SourceKind,
+        operation: @escaping @Sendable () async throws -> Value
+    ) {
+        self.source = source
+        self.operation = operation
+    }
+
+    func fetch(
+        timeout: Duration,
+        timeoutScheduler: any RefreshTimeoutScheduling
+    ) async -> Result<Value, FetchFailure> {
+        guard inFlight == nil else {
+            return .failure(timeoutFailure())
+        }
+
+        nextID += 1
+        let id = nextID
+        let operation = self.operation
+        let task = Task.detached { () -> Result<Value, FetchFailure> in
+            do {
+                return .success(try await operation())
+            } catch {
+                return .failure(sanitizeFetchError(error))
+            }
+        }
+        inFlight = InFlight(id: id, task: task)
+
+        Task { [weak self] in
+            let result = await task.value
+            await self?.fetchFinished(id: id, result: result)
+        }
+
+        let timeoutSource = source
+        return await withCheckedContinuation { continuation in
+            let timeoutTask = Task { [weak self] in
+                do {
+                    try await timeoutScheduler.wait(
+                        for: timeout,
+                        source: timeoutSource
+                    )
+                } catch {
+                    return
+                }
+                await self?.deadlineReached(id: id)
+            }
+            waiter = Waiter(
+                id: id,
+                continuation: continuation,
+                timeoutTask: timeoutTask
+            )
+        }
+    }
+
+    private func fetchFinished(
+        id: Int,
+        result: Result<Value, FetchFailure>
+    ) {
+        guard inFlight?.id == id else { return }
+        inFlight = nil
+        guard let waiter, waiter.id == id else { return }
+        self.waiter = nil
+        waiter.timeoutTask.cancel()
+        waiter.continuation.resume(returning: result)
+    }
+
+    private func deadlineReached(id: Int) {
+        guard let waiter, waiter.id == id else { return }
+        self.waiter = nil
+        waiter.continuation.resume(returning: .failure(timeoutFailure()))
+    }
+
+    private func timeoutFailure() -> FetchFailure {
+        FetchFailure(message: "Quota request timed out.", category: .timeout)
+    }
 }
 
-extension ClaudeQuotaError: SafeQuotaFetchError {
-    public var safeMessage: String {
-        switch self {
-        case .commandFailed: return "Claude quota command failed."
-        case .invalidResponse: return "Claude quota response was invalid."
-        case .expectedTwoAccounts: return "Two Claude accounts are required."
+private func sanitizeFetchError(_ error: Error) -> FetchFailure {
+    if let error = error as? ClaudeQuotaError {
+        switch error {
+        case .commandFailed:
+            return FetchFailure(
+                message: "Quota command failed.",
+                category: .exitCode
+            )
+        case .invalidResponse, .expectedTwoAccounts:
+            return invalidResponseFailure()
         }
     }
-
-    public var failureCategory: FailureCategory {
-        switch self {
-        case .commandFailed: return .exitCode
-        case .invalidResponse, .expectedTwoAccounts: return .invalidResponse
+    if error is CodexQuotaError {
+        return invalidResponseFailure()
+    }
+    if let error = error as? CommandRunnerError {
+        switch error {
+        case .launchFailed:
+            return FetchFailure(
+                message: "Quota command could not be launched.",
+                category: .launch
+            )
+        case .timedOut:
+            return timeoutFetchFailure()
         }
     }
+    if let error = error as? CodexAppServerError {
+        switch error {
+        case .protocolError:
+            return invalidResponseFailure()
+        case .timedOut:
+            return timeoutFetchFailure()
+        case .transportClosed:
+            return transportFetchFailure()
+        }
+    }
+    if let error = error as? JSONLineTransportError {
+        switch error {
+        case .failedToStart:
+            return FetchFailure(
+                message: "Quota service could not be launched.",
+                category: .launch
+            )
+        case .lineTooLong:
+            return invalidResponseFailure()
+        case .transportClosed:
+            return transportFetchFailure()
+        }
+    }
+    return FetchFailure(
+        message: "Quota data is unavailable.",
+        category: .transport
+    )
 }
 
-extension CodexQuotaError: SafeQuotaFetchError {
-    public var safeMessage: String { "Codex quota response was invalid." }
-    public var failureCategory: FailureCategory { .invalidResponse }
+private func timeoutFetchFailure() -> FetchFailure {
+    FetchFailure(message: "Quota request timed out.", category: .timeout)
 }
 
-extension CommandRunnerError: SafeQuotaFetchError {
-    public var safeMessage: String {
-        switch self {
-        case .launchFailed: return "Quota command could not be launched."
-        case .timedOut: return "Request timed out."
-        }
-    }
-
-    public var failureCategory: FailureCategory {
-        switch self {
-        case .launchFailed: return .launch
-        case .timedOut: return .timeout
-        }
-    }
+private func invalidResponseFailure() -> FetchFailure {
+    FetchFailure(
+        message: "Quota response was invalid.",
+        category: .invalidResponse
+    )
 }
 
-extension CodexAppServerError: SafeQuotaFetchError {
-    public var safeMessage: String {
-        switch self {
-        case .protocolError: return "Codex returned an invalid response."
-        case .timedOut: return "Request timed out."
-        case .transportClosed: return "Codex connection closed."
-        }
-    }
-
-    public var failureCategory: FailureCategory {
-        switch self {
-        case .protocolError: return .invalidResponse
-        case .timedOut: return .timeout
-        case .transportClosed: return .transport
-        }
-    }
-}
-
-extension JSONLineTransportError: SafeQuotaFetchError {
-    public var safeMessage: String {
-        switch self {
-        case .failedToStart: return "Codex could not be launched."
-        case .lineTooLong: return "Codex returned an invalid response."
-        case .transportClosed: return "Codex connection closed."
-        }
-    }
-
-    public var failureCategory: FailureCategory {
-        switch self {
-        case .failedToStart: return .launch
-        case .lineTooLong: return .invalidResponse
-        case .transportClosed: return .transport
-        }
-    }
+private func transportFetchFailure() -> FetchFailure {
+    FetchFailure(
+        message: "Quota connection closed.",
+        category: .transport
+    )
 }

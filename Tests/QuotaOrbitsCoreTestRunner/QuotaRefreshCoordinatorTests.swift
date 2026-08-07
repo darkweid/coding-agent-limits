@@ -26,6 +26,9 @@ enum QuotaRefreshCoordinatorTests {
         },
         TestCase(name: "QuotaRefreshCoordinatorTests.testUnknownErrorDetailsAreNotExposed") {
             try await testUnknownErrorDetailsAreNotExposed()
+        },
+        TestCase(name: "QuotaRefreshCoordinatorTests.testDeadlineDoesNotJoinNonCancellableFetch") {
+            try await testDeadlineDoesNotJoinNonCancellableFetch()
         }
     ]
 
@@ -65,7 +68,7 @@ enum QuotaRefreshCoordinatorTests {
 
         try TestSupport.assertEqual(
             coordinator.snapshot.claude,
-            .unavailable(message: "cswap unavailable")
+            .unavailable(message: "Quota data is unavailable.")
         )
         try TestSupport.assertEqual(
             coordinator.snapshot.codex,
@@ -77,7 +80,7 @@ enum QuotaRefreshCoordinatorTests {
     private static func testFailureAfterSuccessKeepsStaleValue() async throws {
         let claude = SequencedClaudeSource([
             .success(twoClaudeAccounts),
-            .failure(.fixture("timeout", .timeout))
+            .failure(.fixture("timeout"))
         ])
         let coordinator = makeCoordinator(
             claude: claude,
@@ -89,7 +92,11 @@ enum QuotaRefreshCoordinatorTests {
 
         try TestSupport.assertEqual(
             coordinator.snapshot.claude,
-            .stale(twoClaudeAccounts, lastSuccessAt: fixedNow, message: "timeout")
+            .stale(
+                twoClaudeAccounts,
+                lastSuccessAt: fixedNow,
+                message: "Quota data is unavailable."
+            )
         )
         try TestSupport.assertEqual(
             coordinator.snapshot.codex,
@@ -166,7 +173,11 @@ enum QuotaRefreshCoordinatorTests {
         try TestSupport.assertEqual(await claude.fetchCount, 2)
         try TestSupport.assertEqual(
             coordinator.snapshot.claude,
-            .stale(twoClaudeAccounts, lastSuccessAt: fixedNow, message: "second cycle failed")
+            .stale(
+                twoClaudeAccounts,
+                lastSuccessAt: fixedNow,
+                message: "Quota data is unavailable."
+            )
         )
     }
 
@@ -181,9 +192,51 @@ enum QuotaRefreshCoordinatorTests {
 
         try TestSupport.assertEqual(
             coordinator.snapshot.claude,
-            .unavailable(message: "Claude quota unavailable.")
+            .unavailable(message: "Quota data is unavailable.")
         )
         try TestSupport.assertFalse(String(describing: coordinator.snapshot).contains("secret"))
+    }
+
+    @MainActor
+    private static func testDeadlineDoesNotJoinNonCancellableFetch() async throws {
+        let blocked = NonCancellableClaudeSource()
+        let secondCodexQuota = CodexQuota(
+            weekly: QuotaWindow(usedPercent: 10, resetsAt: reset),
+            creditsBalance: Decimal(string: "20.00")
+        )
+        let codex = SequencedCodexSource([
+            .success(codexQuota),
+            .success(secondCodexQuota)
+        ])
+        let timeoutScheduler = ManualRefreshTimeoutScheduler()
+        let coordinator = QuotaRefreshCoordinator(
+            claude: blocked,
+            codex: codex,
+            ticker: ManualRefreshTicker(),
+            now: { fixedNow },
+            timeout: .seconds(10),
+            timeoutScheduler: timeoutScheduler
+        )
+        let firstCycle = Task {
+            await coordinator.refreshNow()
+        }
+
+        await blocked.waitUntilFetchStarted()
+        await timeoutScheduler.waitUntilScheduled(for: .claude)
+        await timeoutScheduler.fire(.claude)
+        await firstCycle.value
+
+        try TestSupport.assertEqual(coordinator.isRefreshing, false)
+
+        await coordinator.refreshNow()
+
+        try TestSupport.assertEqual(coordinator.isRefreshing, false)
+        try TestSupport.assertEqual(await blocked.fetchCount, 1)
+        try TestSupport.assertEqual(await codex.fetchCount, 2)
+        try TestSupport.assertEqual(
+            coordinator.snapshot.codex,
+            .available(secondCodexQuota, updatedAt: fixedNow)
+        )
     }
 
     @MainActor
