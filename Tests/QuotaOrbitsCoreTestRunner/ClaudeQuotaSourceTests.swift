@@ -66,6 +66,16 @@ enum ClaudeQuotaSourceTests {
             try TestSupport.assertEqual(String(decoding: result.stdout, as: UTF8.self), "ok")
             try TestSupport.assertEqual(result.exitCode, 0)
         },
+        TestCase(name: "ClaudeQuotaSourceTests.testRealRunnerDrainsLargeStdoutBeforeTimeout") {
+            let result = try await ProcessCommandRunner().run(
+                executable: URL(fileURLWithPath: CommandLine.arguments[0]),
+                arguments: ["--emit-large-payload"],
+                timeout: .seconds(1)
+            )
+
+            try TestSupport.assertEqual(result.stdout.count, 1_000_000)
+            try TestSupport.assertEqual(result.exitCode, 0)
+        },
         TestCase(name: "ClaudeQuotaSourceTests.testRealRunnerTerminatesAfterTimeout") {
             try await TestSupport.assertThrowsErrorAsync(
                 try await ProcessCommandRunner().run(

@@ -37,18 +37,22 @@ public struct ProcessCommandRunner: CommandRunning {
         let stdout = Pipe()
         let stderr = Pipe()
         let termination = ProcessTermination()
+        let stdoutReader = PipeReader(stdout.fileHandleForReading)
+        let stderrReader = PipeReader(stderr.fileHandleForReading)
+        let stdoutTask = Task.detached { stdoutReader.readToEnd() }
+        let stderrTask = Task.detached { stderrReader.readToEnd() }
 
         process.executableURL = executable
         process.arguments = arguments
         process.standardOutput = stdout
         process.standardError = stderr
         process.terminationHandler = { completedProcess in
-            let result = CommandResult(
-                stdout: stdout.fileHandleForReading.readDataToEndOfFile(),
-                stderr: stderr.fileHandleForReading.readDataToEndOfFile(),
-                exitCode: completedProcess.terminationStatus
-            )
             Task {
+                let result = CommandResult(
+                    stdout: await stdoutTask.value,
+                    stderr: await stderrTask.value,
+                    exitCode: completedProcess.terminationStatus
+                )
                 await termination.finish(with: result)
             }
         }
@@ -56,6 +60,10 @@ public struct ProcessCommandRunner: CommandRunning {
         do {
             try process.run()
         } catch {
+            stdout.fileHandleForWriting.closeFile()
+            stderr.fileHandleForWriting.closeFile()
+            _ = await stdoutTask.value
+            _ = await stderrTask.value
             throw CommandRunnerError.launchFailed
         }
 
@@ -111,5 +119,17 @@ private actor ProcessTermination {
 private func terminateIfRunning(_ process: Process) {
     if process.isRunning {
         process.terminate()
+    }
+}
+
+private final class PipeReader: @unchecked Sendable {
+    private let fileHandle: FileHandle
+
+    init(_ fileHandle: FileHandle) {
+        self.fileHandle = fileHandle
+    }
+
+    func readToEnd() -> Data {
+        fileHandle.readDataToEndOfFile()
     }
 }

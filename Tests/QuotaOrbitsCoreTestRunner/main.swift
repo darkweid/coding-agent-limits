@@ -1,8 +1,12 @@
 import Darwin
+import Foundation
 
 let filter: String?
 let arguments = Array(CommandLine.arguments.dropFirst())
-if arguments.isEmpty {
+if arguments == ["--emit-large-payload"] {
+    FileHandle.standardOutput.write(Data(repeating: 0x78, count: 1_000_000))
+    exit(0)
+} else if arguments.isEmpty {
     filter = nil
 } else if arguments.count == 2, arguments[0] == "--filter" {
     filter = arguments[1]
