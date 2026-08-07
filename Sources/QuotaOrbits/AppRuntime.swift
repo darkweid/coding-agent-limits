@@ -25,74 +25,13 @@ private final class WorkspaceNotificationBag: @unchecked Sendable {
     }
 }
 
-private actor MutableClaudeQuotaSource: ClaudeQuotaFetching {
-    private var source: any ClaudeQuotaFetching
-    private var replacementGeneration = 0
-
-    init(source: any ClaudeQuotaFetching) {
-        self.source = source
-    }
-
-    func fetch() async throws -> [ClaudeAccountQuota] {
-        let source = source
-        return try await source.fetch()
-    }
-
-    func replace(
-        with source: any ClaudeQuotaFetching,
-        generation: Int
-    ) {
-        guard generation >= replacementGeneration else { return }
-        replacementGeneration = generation
-        self.source = source
-    }
-}
-
-private actor MutableCodexQuotaSource: CodexQuotaFetching {
-    private var source: any CodexQuotaFetching
-    private var transport: any JSONLineTransport
-    private var replacementGeneration = 0
-
-    init(
-        source: any CodexQuotaFetching,
-        transport: any JSONLineTransport
-    ) {
-        self.source = source
-        self.transport = transport
-    }
-
-    func fetch() async throws -> CodexQuota {
-        let source = source
-        return try await source.fetch()
-    }
-
-    func replace(
-        source: any CodexQuotaFetching,
-        transport: any JSONLineTransport,
-        generation: Int
-    ) async {
-        await self.transport.stop()
-        guard generation >= replacementGeneration else {
-            await transport.stop()
-            return
-        }
-        replacementGeneration = generation
-        self.source = source
-        self.transport = transport
-    }
-
-    func stop() async {
-        await transport.stop()
-    }
-}
-
 @MainActor
 final class AppRuntime {
     let coordinator: QuotaRefreshCoordinator
 
     private let preferences: PanelPreferences
-    private let claudeSource: MutableClaudeQuotaSource
-    private let codexSource: MutableCodexQuotaSource
+    private let claudeSource: ReplaceableClaudeQuotaSource
+    private let codexSource: ReplaceableCodexQuotaSource
     private let workspaceObservers = WorkspaceNotificationBag(
         center: NSWorkspace.shared.notificationCenter
     )
@@ -109,7 +48,7 @@ final class AppRuntime {
     init(preferences: PanelPreferences) {
         self.preferences = preferences
 
-        let claudeSource = MutableClaudeQuotaSource(
+        let claudeSource = ReplaceableClaudeQuotaSource(
             source: ClaudeQuotaSource(
                 executable: URL(fileURLWithPath: preferences.cswapPath)
             )
@@ -120,7 +59,7 @@ final class AppRuntime {
             executable: URL(fileURLWithPath: preferences.codexPath),
             arguments: ["app-server"]
         )
-        let codexSource = MutableCodexQuotaSource(
+        let codexSource = ReplaceableCodexQuotaSource(
             source: CodexQuotaSource(
                 client: CodexAppServerClient(transport: transport)
             ),
@@ -153,11 +92,12 @@ final class AppRuntime {
     }
 
     func updateCswapPath(_ path: String) {
-        guard path != preferences.cswapPath else { return }
+        guard !isShuttingDown, path != preferences.cswapPath else { return }
         preferences.cswapPath = path
         cswapPathGeneration += 1
         let generation = cswapPathGeneration
         cswapPathTask?.cancel()
+        guard isAwake else { return }
         let source = claudeSource
 
         cswapPathTask = Task { [weak self] in
@@ -176,11 +116,12 @@ final class AppRuntime {
     }
 
     func updateCodexPath(_ path: String) {
-        guard path != preferences.codexPath else { return }
+        guard !isShuttingDown, path != preferences.codexPath else { return }
         preferences.codexPath = path
         codexPathGeneration += 1
         let generation = codexPathGeneration
         codexPathTask?.cancel()
+        guard isAwake else { return }
         let source = codexSource
 
         codexPathTask = Task { [weak self] in
@@ -212,16 +153,7 @@ final class AppRuntime {
         removeWorkspaceObservers()
         coordinator.stop()
 
-        manualRefreshTask?.cancel()
-        cswapPathTask?.cancel()
-        codexPathTask?.cancel()
-        await manualRefreshTask?.value
-        await cswapPathTask?.value
-        await codexPathTask?.value
-        manualRefreshTask = nil
-        cswapPathTask = nil
-        codexPathTask = nil
-
+        await cancelRefreshOwningTasks()
         await waitForCoordinatorToStop()
         await codexSource.stop()
     }
@@ -259,12 +191,16 @@ final class AppRuntime {
     private func prepareForSleep() async {
         guard !isShuttingDown else { return }
         lifecycleGeneration += 1
+        let generation = lifecycleGeneration
         isAwake = false
         isStarted = false
         coordinator.stop()
-        manualRefreshTask?.cancel()
+        await cancelRefreshOwningTasks()
         await waitForCoordinatorToStop()
-        manualRefreshTask = nil
+        guard generation == lifecycleGeneration,
+              !isAwake,
+              !isShuttingDown else { return }
+        await reinstallPersistedSources()
     }
 
     private func resumeAfterWake() async {
@@ -273,6 +209,7 @@ final class AppRuntime {
         let generation = lifecycleGeneration
         isAwake = true
         await waitForCoordinatorToStop()
+        await reinstallPersistedSources()
         guard generation == lifecycleGeneration,
               isAwake,
               !isShuttingDown else { return }
@@ -281,16 +218,52 @@ final class AppRuntime {
     }
 
     private func refreshAfterReconfiguration() async {
-        while coordinator.isRefreshing, !Task.isCancelled {
-            await Task.yield()
-        }
+        await coordinator.waitUntilIdle()
         guard !Task.isCancelled, !isShuttingDown, isAwake else { return }
         await coordinator.refreshNow()
     }
 
     private func waitForCoordinatorToStop() async {
-        while coordinator.isRefreshing {
-            await Task.yield()
-        }
+        await coordinator.waitUntilIdle()
+    }
+
+    private func cancelRefreshOwningTasks() async {
+        let pendingManualRefresh = manualRefreshTask
+        let pendingCswapPath = cswapPathTask
+        let pendingCodexPath = codexPathTask
+        pendingManualRefresh?.cancel()
+        pendingCswapPath?.cancel()
+        pendingCodexPath?.cancel()
+        await pendingManualRefresh?.value
+        await pendingCswapPath?.value
+        await pendingCodexPath?.value
+        self.manualRefreshTask = nil
+        self.cswapPathTask = nil
+        self.codexPathTask = nil
+    }
+
+    private func reinstallPersistedSources() async {
+        cswapPathGeneration += 1
+        let cswapGeneration = cswapPathGeneration
+        await claudeSource.replace(
+            with: ClaudeQuotaSource(
+                executable: URL(fileURLWithPath: preferences.cswapPath)
+            ),
+            generation: cswapGeneration
+        )
+
+        codexPathGeneration += 1
+        let codexGeneration = codexPathGeneration
+        let transport = ProcessJSONLineTransport(
+            executable: URL(fileURLWithPath: preferences.codexPath),
+            arguments: ["app-server"]
+        )
+        await codexSource.replace(
+            source: CodexQuotaSource(
+                client: CodexAppServerClient(transport: transport)
+            ),
+            transport: transport,
+            generation: codexGeneration
+        )
     }
 }

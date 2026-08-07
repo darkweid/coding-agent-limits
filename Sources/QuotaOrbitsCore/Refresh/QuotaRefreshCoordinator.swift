@@ -15,6 +15,8 @@ public final class QuotaRefreshCoordinator: ObservableObject {
     private let timeoutScheduler: any RefreshTimeoutScheduling
     private var tickerTask: Task<Void, Never>?
     private var isAwaitingInitialTick = false
+    private var nextIdleWaiterID = 0
+    private var idleWaiters: [Int: CheckedContinuation<Void, Never>] = [:]
 
     public convenience init(
         claude: any ClaudeQuotaFetching,
@@ -76,6 +78,7 @@ public final class QuotaRefreshCoordinator: ObservableObject {
         tickerTask?.cancel()
         tickerTask = nil
         isAwaitingInitialTick = false
+        resumeIdleWaitersIfNeeded()
     }
 
     public func refreshNow() async {
@@ -84,7 +87,10 @@ public final class QuotaRefreshCoordinator: ObservableObject {
         isRefreshing = true
         snapshot.lastCycleStartedAt = now()
         SafeLogger.cycleStarted()
-        defer { isRefreshing = false }
+        defer {
+            isRefreshing = false
+            resumeIdleWaitersIfNeeded()
+        }
 
         await withTaskGroup(of: CompletedFetch.self) { group in
             let claudeGate = self.claudeGate
@@ -121,9 +127,47 @@ public final class QuotaRefreshCoordinator: ObservableObject {
 
     @_spi(Testing)
     public func waitForIdleForTesting() async {
-        while isAwaitingInitialTick || isRefreshing {
-            await Task.yield()
+        await waitUntilIdle()
+    }
+
+    public func waitUntilIdle() async {
+        guard !isIdle, !Task.isCancelled else { return }
+        nextIdleWaiterID += 1
+        let waiterID = nextIdleWaiterID
+
+        await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                if isIdle || Task.isCancelled {
+                    continuation.resume()
+                } else {
+                    idleWaiters[waiterID] = continuation
+                }
+            }
+        } onCancel: {
+            Task { @MainActor [weak self] in
+                self?.cancelIdleWaiter(waiterID)
+            }
         }
+    }
+
+    @_spi(Testing)
+    public var idleWaiterCountForTesting: Int {
+        idleWaiters.count
+    }
+
+    private var isIdle: Bool {
+        !isAwaitingInitialTick && !isRefreshing
+    }
+
+    private func resumeIdleWaitersIfNeeded() {
+        guard isIdle else { return }
+        let waiters = Array(idleWaiters.values)
+        idleWaiters.removeAll()
+        waiters.forEach { $0.resume() }
+    }
+
+    private func cancelIdleWaiter(_ waiterID: Int) {
+        idleWaiters.removeValue(forKey: waiterID)?.resume()
     }
 
     private func applyClaude(
