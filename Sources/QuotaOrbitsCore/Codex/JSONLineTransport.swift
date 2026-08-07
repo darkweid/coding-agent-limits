@@ -13,6 +13,26 @@ public enum JSONLineTransportError: Error, Equatable, Sendable {
     case transportClosed
 }
 
+@_spi(Testing)
+public struct OrderedOutputChunks: Sendable {
+    public let stream: AsyncStream<Data>
+    private let continuation: AsyncStream<Data>.Continuation
+
+    public init() {
+        let pair = AsyncStream<Data>.makeStream(bufferingPolicy: .unbounded)
+        stream = pair.stream
+        continuation = pair.continuation
+    }
+
+    public func yield(_ data: Data) {
+        continuation.yield(data)
+    }
+
+    public func finish() {
+        continuation.finish()
+    }
+}
+
 public actor ProcessJSONLineTransport: JSONLineTransport {
     private static let maximumLineLength = 1_048_576
 
@@ -22,15 +42,19 @@ public actor ProcessJSONLineTransport: JSONLineTransport {
     private var standardInput: FileHandle?
     private var standardOutput: FileHandle?
     private var standardError: FileHandle?
+    private var outputChunks: OrderedOutputChunks?
+    private var outputTask: Task<Void, Never>?
     private var buffer = Data()
     private var lines: [Data] = []
     private var readers: [CheckedContinuation<Data, Error>] = []
     private var isClosed = true
 
-    public init(
-        executable: URL = URL(fileURLWithPath: "/usr/bin/env"),
-        arguments: [String] = ["codex", "app-server"]
-    ) {
+    public init() {
+        self.executable = URL(fileURLWithPath: "/opt/homebrew/bin/codex")
+        self.arguments = ["app-server"]
+    }
+
+    public init(executable: URL, arguments: [String]) {
         self.executable = executable
         self.arguments = arguments
     }
@@ -51,17 +75,29 @@ public actor ProcessJSONLineTransport: JSONLineTransport {
 
         let output = outputPipe.fileHandleForReading
         let error = errorPipe.fileHandleForReading
+        let chunks = OrderedOutputChunks()
         self.process = process
         standardInput = inputPipe.fileHandleForWriting
         standardOutput = output
         standardError = error
+        outputChunks = chunks
         buffer.removeAll(keepingCapacity: true)
         lines.removeAll(keepingCapacity: true)
         isClosed = false
 
-        output.readabilityHandler = { [weak self, weak process] handle in
+        outputTask = Task { [weak self, weak process] in
+            for await data in chunks.stream {
+                await self?.receivedStandardOutput(data, from: process)
+            }
+            await self?.standardOutputFinished(from: process)
+        }
+        output.readabilityHandler = { handle in
             let data = handle.availableData
-            Task { await self?.receivedStandardOutput(data, from: process) }
+            if data.isEmpty {
+                chunks.finish()
+            } else {
+                chunks.yield(data)
+            }
         }
         error.readabilityHandler = { handle in
             _ = handle.availableData
@@ -109,11 +145,6 @@ public actor ProcessJSONLineTransport: JSONLineTransport {
 
     private func receivedStandardOutput(_ data: Data, from child: Process?) {
         guard child === process, !isClosed else { return }
-        guard !data.isEmpty else {
-            close(with: .transportClosed, terminate: true)
-            return
-        }
-
         buffer.append(data)
         while let newline = buffer.firstIndex(of: 0x0A) {
             var line = Data(buffer[..<newline])
@@ -129,6 +160,11 @@ public actor ProcessJSONLineTransport: JSONLineTransport {
         if buffer.count > Self.maximumLineLength {
             close(with: .lineTooLong, terminate: true)
         }
+    }
+
+    private func standardOutputFinished(from child: Process?) {
+        guard child === process, !isClosed else { return }
+        close(with: .transportClosed, terminate: true)
     }
 
     private func yield(_ line: Data) {
@@ -154,6 +190,8 @@ public actor ProcessJSONLineTransport: JSONLineTransport {
         standardOutput?.readabilityHandler = nil
         standardError?.readabilityHandler = nil
         process?.terminationHandler = nil
+        outputChunks?.finish()
+        outputTask?.cancel()
         try? standardInput?.close()
         try? standardOutput?.close()
         try? standardError?.close()
@@ -163,6 +201,8 @@ public actor ProcessJSONLineTransport: JSONLineTransport {
         standardInput = nil
         standardOutput = nil
         standardError = nil
+        outputChunks = nil
+        outputTask = nil
         process = nil
     }
 

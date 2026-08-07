@@ -12,6 +12,12 @@ public actor CodexAppServerClient {
         let timeoutTask: Task<Void, Never>
     }
 
+    private struct OutboundWrite {
+        let line: Data
+        let requestID: Int?
+        let completion: CheckedContinuation<Void, Error>?
+    }
+
     private struct ResponseHeader: Decodable {
         struct RPCError: Decodable {}
 
@@ -23,13 +29,18 @@ public actor CodexAppServerClient {
     private let clock = ContinuousClock()
     private var nextRequestID = 1
     private var pending: [Int: PendingRequest] = [:]
+    private var outboundWrites: [OutboundWrite] = []
+    private var writerTask: Task<Void, Never>?
+    private var writerGeneration = 0
     private var readTask: Task<Void, Never>?
     private var initializationTask: Task<Void, Error>?
     private var isInitialized = false
 
-    public init(
-        transport: any JSONLineTransport = ProcessJSONLineTransport()
-    ) {
+    public init() {
+        self.transport = ProcessJSONLineTransport()
+    }
+
+    public init(transport: any JSONLineTransport) {
         self.transport = transport
     }
 
@@ -116,9 +127,7 @@ public actor CodexAppServerClient {
                     continuation: continuation,
                     timeoutTask: timeoutTask
                 )
-                Task { [weak self] in
-                    await self?.write(line, requestID: id)
-                }
+                enqueueWrite(line, requestID: id)
             }
         } onCancel: {
             Task { await self.cancelRequest(id) }
@@ -131,7 +140,13 @@ public actor CodexAppServerClient {
     ) async throws {
         let line = try makeLine(method: method, id: nil, params: params)
         do {
-            try await transport.send(line)
+            try await withCheckedThrowingContinuation { continuation in
+                enqueueWrite(
+                    line,
+                    requestID: nil,
+                    completion: continuation
+                )
+            }
         } catch {
             await failConnection(with: .transportClosed)
             throw CodexAppServerError.transportClosed
@@ -185,12 +200,51 @@ public actor CodexAppServerClient {
         request.continuation.resume(returning: line)
     }
 
-    private func write(_ line: Data, requestID: Int) async {
-        guard pending[requestID] != nil else { return }
-        do {
-            try await transport.send(line)
-        } catch {
-            await failConnection(with: .transportClosed)
+    private func enqueueWrite(
+        _ line: Data,
+        requestID: Int?,
+        completion: CheckedContinuation<Void, Error>? = nil
+    ) {
+        outboundWrites.append(
+            OutboundWrite(
+                line: line,
+                requestID: requestID,
+                completion: completion
+            )
+        )
+        guard writerTask == nil else { return }
+        writerGeneration += 1
+        let generation = writerGeneration
+        writerTask = Task { [weak self] in
+            await self?.drainWrites(generation: generation)
+        }
+    }
+
+    private func drainWrites(generation: Int) async {
+        while generation == writerGeneration, !outboundWrites.isEmpty {
+            let write = outboundWrites.removeFirst()
+            if let requestID = write.requestID, pending[requestID] == nil {
+                continue
+            }
+            do {
+                try await transport.send(write.line)
+                guard generation == writerGeneration else {
+                    write.completion?.resume(
+                        throwing: CodexAppServerError.transportClosed
+                    )
+                    return
+                }
+                write.completion?.resume(returning: ())
+            } catch {
+                write.completion?.resume(
+                    throwing: CodexAppServerError.transportClosed
+                )
+                await failConnection(with: .transportClosed)
+                return
+            }
+        }
+        if generation == writerGeneration {
+            writerTask = nil
         }
     }
 
@@ -210,6 +264,15 @@ public actor CodexAppServerClient {
         isInitialized = false
         readTask?.cancel()
         readTask = nil
+        writerGeneration += 1
+        writerTask?.cancel()
+        writerTask = nil
+
+        let queuedWrites = outboundWrites
+        outboundWrites.removeAll()
+        for write in queuedWrites {
+            write.completion?.resume(throwing: error)
+        }
 
         let requests = pending.values
         pending.removeAll()

@@ -1,8 +1,8 @@
 import Foundation
 
-struct TestCase {
+struct TestCase: Sendable {
     let name: String
-    let body: () async throws -> Void
+    let body: @Sendable () async throws -> Void
 }
 
 struct AssertionFailure: Error, CustomStringConvertible {

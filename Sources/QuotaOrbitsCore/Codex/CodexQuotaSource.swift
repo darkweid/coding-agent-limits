@@ -8,7 +8,11 @@ public enum CodexQuotaError: Error, Equatable, Sendable {
 public actor CodexQuotaSource: CodexQuotaFetching {
     private let client: CodexAppServerClient
 
-    public init(client: CodexAppServerClient = CodexAppServerClient()) {
+    public init() {
+        self.client = CodexAppServerClient()
+    }
+
+    public init(client: CodexAppServerClient) {
         self.client = client
     }
 

@@ -1,6 +1,14 @@
 import Foundation
 import QuotaOrbitsCore
 
+struct ScriptedSentMessage: Equatable, Sendable {
+    let method: String?
+    let id: Int?
+    let clientName: String?
+    let clientTitle: String?
+    let clientVersion: String?
+}
+
 actor MockCommandRunner: CommandRunning {
     let result: CommandResult
     private(set) var lastExecutable: URL?
@@ -80,9 +88,20 @@ actor ScriptedJSONLineTransport: JSONLineTransport {
         pending.forEach { $0.resume(throwing: JSONLineTransportError.transportClosed) }
     }
 
-    func sentObjects() -> [[String: Any]] {
+    func sentMessages() -> [ScriptedSentMessage] {
         sent.compactMap {
-            try? JSONSerialization.jsonObject(with: $0) as? [String: Any]
+            guard let object = try? JSONSerialization.jsonObject(with: $0)
+                as? [String: Any]
+            else { return nil }
+            let params = object["params"] as? [String: Any]
+            let clientInfo = params?["clientInfo"] as? [String: Any]
+            return ScriptedSentMessage(
+                method: object["method"] as? String,
+                id: object["id"] as? Int,
+                clientName: clientInfo?["name"] as? String,
+                clientTitle: clientInfo?["title"] as? String,
+                clientVersion: clientInfo?["version"] as? String
+            )
         }
     }
 
@@ -106,5 +125,56 @@ actor ScriptedJSONLineTransport: JSONLineTransport {
         case let .line(line): continuation.resume(returning: line)
         case .closed: continuation.resume(throwing: JSONLineTransportError.transportClosed)
         }
+    }
+}
+
+actor DelayingJSONLineTransport: JSONLineTransport {
+    private let delayedRequestID: Int
+    private var sentIDs: [Int] = []
+    private var ready: [Data] = []
+    private var waiters: [CheckedContinuation<Data, Error>] = []
+    private var isStarted = false
+
+    init(delayedRequestID: Int) {
+        self.delayedRequestID = delayedRequestID
+    }
+
+    func start() async throws {
+        isStarted = true
+    }
+
+    func send(_ line: Data) async throws {
+        guard isStarted else { throw JSONLineTransportError.transportClosed }
+        let object = try JSONSerialization.jsonObject(with: line) as? [String: Any]
+        guard let id = object?["id"] as? Int else { return }
+        if id == delayedRequestID {
+            try await Task.sleep(nanoseconds: 100_000_000)
+        }
+        sentIDs.append(id)
+        let response = Data(#"{"id":\#(id),"result":{}}"#.utf8)
+        if !waiters.isEmpty {
+            waiters.removeFirst().resume(returning: response)
+        } else {
+            ready.append(response)
+        }
+    }
+
+    func nextLine() async throws -> Data {
+        guard isStarted else { throw JSONLineTransportError.transportClosed }
+        if !ready.isEmpty { return ready.removeFirst() }
+        return try await withCheckedThrowingContinuation { continuation in
+            waiters.append(continuation)
+        }
+    }
+
+    func stop() async {
+        isStarted = false
+        let pending = waiters
+        waiters.removeAll()
+        pending.forEach { $0.resume(throwing: JSONLineTransportError.transportClosed) }
+    }
+
+    func sentRequestIDs() -> [Int] {
+        sentIDs
     }
 }

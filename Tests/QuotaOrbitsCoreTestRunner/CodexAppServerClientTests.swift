@@ -1,8 +1,21 @@
 import Foundation
-import QuotaOrbitsCore
+@_spi(Testing) import QuotaOrbitsCore
 
 enum CodexAppServerClientTests {
     static let cases: [TestCase] = [
+        TestCase(name: "CodexAppServerClientTests.testOutputChunkStreamPreservesCallbackOrder") {
+            let chunks = OrderedOutputChunks()
+            let expected = [Data("first".utf8), Data("second".utf8), Data("third".utf8)]
+
+            expected.forEach(chunks.yield)
+            chunks.finish()
+
+            var received: [Data] = []
+            for await chunk in chunks.stream {
+                received.append(chunk)
+            }
+            try TestSupport.assertEqual(received, expected)
+        },
         TestCase(name: "CodexAppServerClientTests.testProcessTransportRetainsFinalLineAfterChildExit") {
             let expected = Data(#"{"id":1,"result":{}}"#.utf8)
             let transport = ProcessJSONLineTransport(
@@ -28,22 +41,34 @@ enum CodexAppServerClientTests {
             _ = try await client.rateLimitsResponse()
             _ = try await client.rateLimitsResponse()
 
-            let sent = await transport.sentObjects()
+            let sent = await transport.sentMessages()
             try TestSupport.assertEqual(sent.count, 4)
-            try TestSupport.assertEqual(sent[0]["method"] as? String, "initialize")
-            try TestSupport.assertEqual(sent[0]["id"] as? Int, 1)
-            let initializeParams = sent[0]["params"] as? [String: Any]
-            let clientInfo = initializeParams?["clientInfo"] as? [String: Any]
-            try TestSupport.assertEqual(clientInfo?["name"] as? String, "quota_orbits")
-            try TestSupport.assertEqual(clientInfo?["title"] as? String, "Quota Orbits")
-            try TestSupport.assertEqual(clientInfo?["version"] as? String, "0.1.0")
-            try TestSupport.assertEqual(sent[1]["method"] as? String, "initialized")
-            try TestSupport.assertEqual(sent[1]["id"] as? Int, nil)
-            try TestSupport.assertEqual(sent[2]["method"] as? String, "account/rateLimits/read")
-            try TestSupport.assertEqual(sent[2]["id"] as? Int, 2)
-            try TestSupport.assertEqual(sent[3]["method"] as? String, "account/rateLimits/read")
-            try TestSupport.assertEqual(sent[3]["id"] as? Int, 3)
+            try TestSupport.assertEqual(sent[0].method, "initialize")
+            try TestSupport.assertEqual(sent[0].id, 1)
+            try TestSupport.assertEqual(sent[0].clientName, "quota_orbits")
+            try TestSupport.assertEqual(sent[0].clientTitle, "Quota Orbits")
+            try TestSupport.assertEqual(sent[0].clientVersion, "0.1.0")
+            try TestSupport.assertEqual(sent[1].method, "initialized")
+            try TestSupport.assertEqual(sent[1].id, nil)
+            try TestSupport.assertEqual(sent[2].method, "account/rateLimits/read")
+            try TestSupport.assertEqual(sent[2].id, 2)
+            try TestSupport.assertEqual(sent[3].method, "account/rateLimits/read")
+            try TestSupport.assertEqual(sent[3].id, 3)
             try TestSupport.assertEqual(await transport.startCount, 1)
+        },
+        TestCase(name: "CodexAppServerClientTests.testConcurrentRequestsAreWrittenInIDOrder") {
+            let transport = DelayingJSONLineTransport(delayedRequestID: 3)
+            let client = CodexAppServerClient(transport: transport)
+            _ = try await client.rateLimitsResponse()
+
+            async let first = client.rateLimitsResponse()
+            async let second = client.rateLimitsResponse()
+            _ = try await (first, second)
+
+            try TestSupport.assertEqual(
+                await transport.sentRequestIDs(),
+                [1, 2, 3, 4]
+            )
         },
         TestCase(name: "CodexAppServerClientTests.testClosureIsSanitizedAndNextCallReconnects") {
             let transport = ScriptedJSONLineTransport(outcomes: [
@@ -68,7 +93,7 @@ enum CodexAppServerClientTests {
             try TestSupport.assertEqual(object?["id"] as? Int, 4)
             try TestSupport.assertEqual(await transport.startCount, 2)
 
-            let methods = await transport.sentObjects().compactMap { $0["method"] as? String }
+            let methods = await transport.sentMessages().compactMap(\.method)
             try TestSupport.assertEqual(
                 methods,
                 [
