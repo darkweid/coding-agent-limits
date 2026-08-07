@@ -3,7 +3,7 @@ import QuotaOrbitsCore
 
 enum QuotaFormattingTests {
     static let cases: [TestCase] = [
-        TestCase(name: "QuotaFormattingTests.minutes only") {
+        TestCase(name: "QuotaFormattingTests.testMinutesOnly") {
             let now = Date(timeIntervalSince1970: 1_000_000)
             try TestSupport.assertEqual(
                 ResetCountdownFormatter.string(
@@ -13,7 +13,7 @@ enum QuotaFormattingTests {
                 "сброс через 25м"
             )
         },
-        TestCase(name: "QuotaFormattingTests.hours and minutes") {
+        TestCase(name: "QuotaFormattingTests.testHoursAndMinutes") {
             let now = Date(timeIntervalSince1970: 1_000_000)
             try TestSupport.assertEqual(
                 ResetCountdownFormatter.string(
@@ -23,7 +23,7 @@ enum QuotaFormattingTests {
                 "сброс через 3ч 25м"
             )
         },
-        TestCase(name: "QuotaFormattingTests.days and hours drops minutes") {
+        TestCase(name: "QuotaFormattingTests.testDaysAndHoursDropsMinutes") {
             let now = Date(timeIntervalSince1970: 1_000_000)
             try TestSupport.assertEqual(
                 ResetCountdownFormatter.string(
@@ -33,7 +33,7 @@ enum QuotaFormattingTests {
                 "сброс через 2д 13ч"
             )
         },
-        TestCase(name: "QuotaFormattingTests.expired window") {
+        TestCase(name: "QuotaFormattingTests.testExpiredWindow") {
             let now = Date(timeIntervalSince1970: 1_000_000)
             try TestSupport.assertEqual(
                 ResetCountdownFormatter.string(until: now, now: now),
