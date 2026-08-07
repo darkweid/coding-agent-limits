@@ -20,6 +20,7 @@ let allCases = QuotaModelsTests.cases
     + ClaudeQuotaSourceTests.cases
     + CodexAppServerClientTests.cases
     + CodexQuotaSourceTests.cases
+    + QuotaRefreshCoordinatorTests.cases
 let selectedCases = allCases.filter { testCase in
     filter.map { testCase.name.localizedCaseInsensitiveContains($0) } ?? true
 }

@@ -178,3 +178,150 @@ actor DelayingJSONLineTransport: JSONLineTransport {
         sentIDs
     }
 }
+
+enum FixtureQuotaFetchError: SafeQuotaFetchError {
+    case fixture(String, FailureCategory = .transport)
+
+    var safeMessage: String {
+        switch self {
+        case let .fixture(message, _): return message
+        }
+    }
+
+    var failureCategory: FailureCategory {
+        switch self {
+        case let .fixture(_, category): return category
+        }
+    }
+}
+
+actor SequencedClaudeSource: ClaudeQuotaFetching {
+    typealias Outcome = Result<[ClaudeAccountQuota], FixtureQuotaFetchError>
+
+    private var outcomes: [Outcome]
+    private var countWaiters: [(Int, CheckedContinuation<Void, Never>)] = []
+    private(set) var fetchCount = 0
+
+    init(_ outcomes: [Outcome]) {
+        self.outcomes = outcomes
+    }
+
+    func fetch() async throws -> [ClaudeAccountQuota] {
+        fetchCount += 1
+        resumeCountWaiters()
+        guard !outcomes.isEmpty else {
+            throw FixtureQuotaFetchError.fixture("missing scripted Claude outcome")
+        }
+        return try outcomes.removeFirst().get()
+    }
+
+    func waitUntilFetchCount(_ expectedCount: Int) async {
+        if fetchCount >= expectedCount { return }
+        await withCheckedContinuation { continuation in
+            countWaiters.append((expectedCount, continuation))
+        }
+    }
+
+    private func resumeCountWaiters() {
+        let ready = countWaiters.filter { $0.0 <= fetchCount }
+        countWaiters.removeAll { $0.0 <= fetchCount }
+        ready.forEach { $0.1.resume() }
+    }
+}
+
+actor SequencedCodexSource: CodexQuotaFetching {
+    typealias Outcome = Result<CodexQuota, FixtureQuotaFetchError>
+
+    private var outcomes: [Outcome]
+    private var countWaiters: [(Int, CheckedContinuation<Void, Never>)] = []
+    private(set) var fetchCount = 0
+
+    init(_ outcomes: [Outcome]) {
+        self.outcomes = outcomes
+    }
+
+    func fetch() async throws -> CodexQuota {
+        fetchCount += 1
+        resumeCountWaiters()
+        guard !outcomes.isEmpty else {
+            throw FixtureQuotaFetchError.fixture("missing scripted Codex outcome")
+        }
+        return try outcomes.removeFirst().get()
+    }
+
+    func waitUntilFetchCount(_ expectedCount: Int) async {
+        if fetchCount >= expectedCount { return }
+        await withCheckedContinuation { continuation in
+            countWaiters.append((expectedCount, continuation))
+        }
+    }
+
+    private func resumeCountWaiters() {
+        let ready = countWaiters.filter { $0.0 <= fetchCount }
+        countWaiters.removeAll { $0.0 <= fetchCount }
+        ready.forEach { $0.1.resume() }
+    }
+}
+
+actor BlockingClaudeSource: ClaudeQuotaFetching {
+    private let value: [ClaudeAccountQuota]
+    private var releaseContinuation: CheckedContinuation<Void, Never>?
+    private var startWaiters: [CheckedContinuation<Void, Never>] = []
+    private(set) var fetchCount = 0
+
+    init(value: [ClaudeAccountQuota]) {
+        self.value = value
+    }
+
+    func fetch() async throws -> [ClaudeAccountQuota] {
+        fetchCount += 1
+        let waiters = startWaiters
+        startWaiters.removeAll()
+        waiters.forEach { $0.resume() }
+        await withCheckedContinuation { continuation in
+            releaseContinuation = continuation
+        }
+        return value
+    }
+
+    func waitUntilFetchStarted() async {
+        if fetchCount > 0 { return }
+        await withCheckedContinuation { continuation in
+            startWaiters.append(continuation)
+        }
+    }
+
+    func release() {
+        releaseContinuation?.resume()
+        releaseContinuation = nil
+    }
+}
+
+final class ManualRefreshTicker: RefreshTicking, @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: AsyncStream<Void>.Continuation?
+
+    func ticks(every interval: Duration) -> AsyncStream<Void> {
+        AsyncStream(bufferingPolicy: .bufferingNewest(1)) { continuation in
+            lock.lock()
+            self.continuation = continuation
+            lock.unlock()
+            continuation.yield(())
+        }
+    }
+
+    func yield() {
+        lock.lock()
+        let continuation = continuation
+        lock.unlock()
+        continuation?.yield(())
+    }
+
+    func finish() {
+        lock.lock()
+        let continuation = continuation
+        self.continuation = nil
+        lock.unlock()
+        continuation?.finish()
+    }
+}
