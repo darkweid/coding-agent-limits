@@ -24,4 +24,41 @@ enum TestSupport {
             )
         }
     }
+
+    static func assertThrowsErrorAsync<Value>(
+        _ expression: @autoclosure () async throws -> Value,
+        _ errorHandler: (Error) throws -> Void
+    ) async throws {
+        do {
+            _ = try await expression()
+        } catch {
+            try errorHandler(error)
+            return
+        }
+
+        throw AssertionFailure(message: "expected expression to throw an error")
+    }
+
+    static func assertFalse(
+        _ condition: Bool,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) throws {
+        guard !condition else {
+            throw AssertionFailure(message: "\(file):\(line): expected false")
+        }
+    }
+
+    static func fixtureData(
+        _ name: String
+    ) throws -> Data {
+        guard let url = Bundle.module.url(
+            forResource: name,
+            withExtension: nil,
+            subdirectory: "Fixtures"
+        ) else {
+            throw AssertionFailure(message: "missing fixture \(name)")
+        }
+        return try Data(contentsOf: url)
+    }
 }

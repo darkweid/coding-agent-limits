@@ -15,6 +15,7 @@ let package = Package(
             name: "QuotaOrbitsCoreTestRunner",
             dependencies: ["QuotaOrbitsCore"],
             path: "Tests/QuotaOrbitsCoreTestRunner",
+            resources: [.copy("Fixtures")],
             swiftSettings: swift5
         )
     ]

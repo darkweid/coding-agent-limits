@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "activeAccountNumber": 2,
+  "accounts": [
+    {
+      "number": 1,
+      "email": "hidden@example.invalid",
+      "active": false,
+      "usageStatus": "ok",
+      "usage": {
+        "fiveHour": {
+          "pct": 0.0,
+          "resetsAt": "2026-08-07T12:30:00.162124+00:00"
+        },
+        "sevenDay": {
+          "pct": 19.0,
+          "resetsAt": "2026-08-12T07:00:00.162148+00:00"
+        }
+      },
+      "alias": "max"
+    },
+    {
+      "number": 2,
+      "email": "hidden2@example.invalid",
+      "active": true,
+      "usageStatus": "ok",
+      "usage": {
+        "fiveHour": {
+          "pct": 72.0,
+          "resetsAt": "2026-08-07T11:50:00.774549+00:00"
+        },
+        "sevenDay": {
+          "pct": 7.0,
+          "resetsAt": "2026-08-09T22:00:00.774573+00:00"
+        }
+      },
+      "alias": "pro"
+    }
+  ]
+}

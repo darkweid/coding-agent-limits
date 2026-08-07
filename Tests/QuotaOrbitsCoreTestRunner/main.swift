@@ -11,7 +11,9 @@ if arguments.isEmpty {
     exit(2)
 }
 
-let allCases = QuotaModelsTests.cases + QuotaFormattingTests.cases
+let allCases = QuotaModelsTests.cases
+    + QuotaFormattingTests.cases
+    + ClaudeQuotaSourceTests.cases
 let selectedCases = allCases.filter { testCase in
     filter.map { testCase.name.localizedCaseInsensitiveContains($0) } ?? true
 }
