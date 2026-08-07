@@ -1,0 +1,198 @@
+import QuotaOrbitsCore
+import SwiftUI
+
+@MainActor
+public final class DashboardActions: ObservableObject {
+    @Published public var isPinned: Bool
+    public let refreshNow: () -> Void
+    public let togglePinned: () -> Void
+    public let openSettings: () -> Void
+    public let quit: () -> Void
+
+    public init(
+        isPinned: Bool,
+        refreshNow: @escaping () -> Void,
+        togglePinned: @escaping () -> Void,
+        openSettings: @escaping () -> Void,
+        quit: @escaping () -> Void
+    ) {
+        self.isPinned = isPinned
+        self.refreshNow = refreshNow
+        self.togglePinned = togglePinned
+        self.openSettings = openSettings
+        self.quit = quit
+    }
+}
+
+public struct DashboardView: View {
+    @ObservedObject private var coordinator: QuotaRefreshCoordinator
+    @ObservedObject private var actions: DashboardActions
+
+    @MainActor
+    public init(
+        coordinator: QuotaRefreshCoordinator,
+        actions: DashboardActions
+    ) {
+        self.coordinator = coordinator
+        self.actions = actions
+    }
+
+    public var body: some View {
+        DashboardContentView(
+            presentation: DashboardPresentation(snapshot: coordinator.snapshot),
+            actions: actions
+        )
+    }
+}
+
+struct DashboardContentView: View {
+    let presentation: DashboardPresentation
+    @ObservedObject var actions: DashboardActions
+    var fixedNow: Date?
+
+    var body: some View {
+        VStack(spacing: 8) {
+            HStack {
+                Spacer()
+                if let date = presentation.lastSuccessfulRefreshAt {
+                    Text(QuotaCopy.lastRefresh(date))
+                        .font(.system(size: 9, weight: .medium, design: .rounded))
+                        .foregroundStyle(Color.white.opacity(0.42))
+                }
+            }
+            .frame(height: 12)
+
+            HStack(spacing: 8) {
+                ForEach(presentation.accounts) { account in
+                    ClaudeAccountCard(account: account, fixedNow: fixedNow)
+                }
+            }
+            .frame(height: 190)
+
+            CodexQuotaCard(quota: presentation.codex, fixedNow: fixedNow)
+                .frame(height: 108)
+        }
+        .padding(12)
+        .frame(width: 350, height: 350)
+        .background(panelBackground)
+        .contextMenu {
+            let labels = DashboardCopy.contextActions(isPinned: actions.isPinned)
+            Button(labels[0], action: actions.refreshNow)
+            Button(labels[1], action: actions.togglePinned)
+            Divider()
+            Button(labels[2], action: actions.openSettings)
+            Button(labels[3], action: actions.quit)
+        }
+        .preferredColorScheme(.dark)
+    }
+
+    private var panelBackground: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .fill(.ultraThinMaterial)
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .fill(Color(red: 0.055, green: 0.057, blue: 0.062).opacity(0.90))
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .stroke(Color.white.opacity(0.09), lineWidth: 0.75)
+        }
+    }
+}
+
+private enum DashboardPreviewFixtures {
+    static let now = Date(timeIntervalSince1970: 1_800_000_000)
+
+    static func window(remaining: Double, hours: Double) -> QuotaWindow {
+        QuotaWindow(
+            usedPercent: 100 - remaining,
+            resetsAt: now.addingTimeInterval(hours * 3_600)
+        )
+    }
+
+    static func account(
+        id: String,
+        alias: String,
+        active: Bool,
+        fiveHour: Double,
+        weekly: Double
+    ) -> ClaudeAccountQuota {
+        ClaudeAccountQuota(
+            id: id,
+            alias: alias,
+            isActive: active,
+            fiveHour: window(remaining: fiveHour, hours: 3.5),
+            weekly: window(remaining: weekly, hours: 61)
+        )
+    }
+
+    static let accounts = [
+        account(id: "one", alias: "max", active: false, fiveHour: 100, weekly: 81),
+        account(id: "two", alias: "pro", active: true, fiveHour: 28, weekly: 93)
+    ]
+
+    static let quota = CodexQuota(
+        weekly: window(remaining: 50, hours: 72),
+        creditsBalance: Decimal(string: "411.51")
+    )
+
+    static let available = QuotaSnapshot(
+        claude: .available(accounts, updatedAt: now),
+        codex: .available(quota, updatedAt: now),
+        lastCycleStartedAt: now
+    )
+
+    static let stale = QuotaSnapshot(
+        claude: .stale(accounts, lastSuccessAt: now.addingTimeInterval(-480), message: "недоступно"),
+        codex: .stale(quota, lastSuccessAt: now.addingTimeInterval(-180), message: "недоступно"),
+        lastCycleStartedAt: now
+    )
+
+    static let unavailable = QuotaSnapshot(
+        claude: .unavailable(message: "недоступно"),
+        codex: .unavailable(message: "недоступно"),
+        lastCycleStartedAt: now
+    )
+
+    static let longAlias = QuotaSnapshot(
+        claude: .available(
+            [
+                account(id: "one", alias: "необычно-длинное-нейтральное-имя", active: true, fiveHour: 100, weekly: 81),
+                account(id: "two", alias: "02", active: false, fiveHour: 28, weekly: 93)
+            ],
+            updatedAt: now
+        ),
+        codex: .available(quota, updatedAt: now),
+        lastCycleStartedAt: now
+    )
+}
+
+struct DashboardView_Previews: PreviewProvider {
+    @MainActor
+    static var previews: some View {
+        Group {
+            preview(snapshot: DashboardPreviewFixtures.available)
+                .previewDisplayName("Обычное")
+            preview(snapshot: DashboardPreviewFixtures.stale)
+                .previewDisplayName("Устаревшие данные")
+            preview(snapshot: DashboardPreviewFixtures.unavailable)
+                .previewDisplayName("Нет данных")
+            preview(snapshot: DashboardPreviewFixtures.longAlias)
+                .previewDisplayName("Длинное имя")
+        }
+        .previewLayout(.fixed(width: 350, height: 350))
+    }
+
+    @MainActor
+    private static func preview(snapshot: QuotaSnapshot) -> some View {
+        DashboardContentView(
+            presentation: DashboardPresentation(snapshot: snapshot),
+            actions: DashboardActions(
+                isPinned: true,
+                refreshNow: {},
+                togglePinned: {},
+                openSettings: {},
+                quit: {}
+            ),
+            fixedNow: DashboardPreviewFixtures.now
+        )
+    }
+}
