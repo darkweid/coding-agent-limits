@@ -11,9 +11,10 @@ let package = Package(
     ],
     targets: [
         .target(name: "QuotaOrbitsCore", swiftSettings: swift5),
-        .testTarget(
-            name: "QuotaOrbitsCoreTests",
+        .executableTarget(
+            name: "QuotaOrbitsCoreTestRunner",
             dependencies: ["QuotaOrbitsCore"],
+            path: "Tests/QuotaOrbitsCoreTestRunner",
             swiftSettings: swift5
         )
     ]
