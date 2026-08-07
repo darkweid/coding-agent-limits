@@ -83,7 +83,6 @@ struct DashboardContentView: View {
             Button(labels[2], action: actions.openSettings)
             Button(labels[3], action: actions.quit)
         }
-        .preferredColorScheme(.dark)
     }
 
     private var panelBackground: some View {
@@ -152,6 +151,38 @@ private enum DashboardPreviewFixtures {
         lastCycleStartedAt: now
     )
 
+    static let loading = QuotaSnapshot.initial
+
+    static let thresholdEdges = QuotaSnapshot(
+        claude: .available(
+            [
+                account(id: "one", alias: "19", active: true, fiveHour: 19, weekly: 0),
+                account(id: "two", alias: "20", active: false, fiveHour: 51, weekly: 20)
+            ],
+            updatedAt: now
+        ),
+        codex: .available(
+            CodexQuota(
+                weekly: window(remaining: 19, hours: 72),
+                creditsBalance: nil
+            ),
+            updatedAt: now
+        ),
+        lastCycleStartedAt: now
+    )
+
+    static let aliasFallback = QuotaSnapshot(
+        claude: .available(
+            [
+                account(id: "one", alias: "", active: true, fiveHour: 100, weekly: 81),
+                account(id: "two", alias: "   ", active: false, fiveHour: 28, weekly: 93)
+            ],
+            updatedAt: now
+        ),
+        codex: .available(quota, updatedAt: now),
+        lastCycleStartedAt: now
+    )
+
     static let longAlias = QuotaSnapshot(
         claude: .available(
             [
@@ -171,10 +202,19 @@ struct DashboardView_Previews: PreviewProvider {
         Group {
             preview(snapshot: DashboardPreviewFixtures.available)
                 .previewDisplayName("Обычное")
+            preview(snapshot: DashboardPreviewFixtures.available)
+                .environment(\.colorScheme, .light)
+                .previewDisplayName("Светлая система")
+            preview(snapshot: DashboardPreviewFixtures.loading)
+                .previewDisplayName("Загрузка")
             preview(snapshot: DashboardPreviewFixtures.stale)
                 .previewDisplayName("Устаревшие данные")
             preview(snapshot: DashboardPreviewFixtures.unavailable)
                 .previewDisplayName("Нет данных")
+            preview(snapshot: DashboardPreviewFixtures.thresholdEdges)
+                .previewDisplayName("Границы 19 и 0")
+            preview(snapshot: DashboardPreviewFixtures.aliasFallback)
+                .previewDisplayName("Запасные имена")
             preview(snapshot: DashboardPreviewFixtures.longAlias)
                 .previewDisplayName("Длинное имя")
         }

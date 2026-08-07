@@ -38,7 +38,7 @@ struct CodexQuotaCard: View {
             .frame(width: 72, height: 72)
 
             VStack(alignment: .leading, spacing: 8) {
-                Text(QuotaCopy.reset(prefix: "7д", window: quota.weekly, now: now))
+                Text(quota.status.reset(prefix: "7д", window: quota.weekly, now: now))
                     .font(.system(size: 11, weight: .medium, design: .rounded))
                     .foregroundStyle(Color.white.opacity(0.68))
                     .lineLimit(1)

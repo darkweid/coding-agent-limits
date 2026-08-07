@@ -70,7 +70,7 @@ enum QuotaPresentationTests {
             let presentation = DashboardPresentation(
                 snapshot: QuotaSnapshot(
                     claude: .unavailable(message: "private failure"),
-                    codex: .loading
+                    codex: .unavailable(message: "private failure")
                 )
             )
 
@@ -78,7 +78,33 @@ enum QuotaPresentationTests {
             try TestSupport.assertEqual(presentation.accounts.map(\.fiveHour), [nil, nil])
             try TestSupport.assertEqual(presentation.accounts.map(\.weekly), [nil, nil])
             try TestSupport.assertEqual(presentation.accounts.map { $0.status.text(now: now) }, ["нет данных", "нет данных"])
+            try TestSupport.assertEqual(
+                presentation.accounts[0].status.reset(prefix: "5ч", window: nil, now: now),
+                "5ч · нет данных"
+            )
             try TestSupport.assertEqual(presentation.codex.status.text(now: now), "нет данных")
+            try TestSupport.assertEqual(presentation.lastSuccessfulRefreshAt, nil)
+        },
+        TestCase(name: "QuotaPresentationTests.testLoadingProjectionKeepsPlaceholdersWithoutFailureCopy") {
+            let presentation = DashboardPresentation(snapshot: .initial)
+
+            try TestSupport.assertEqual(presentation.accounts.map(\.alias), ["01", "02"])
+            try TestSupport.assertEqual(presentation.accounts.map(\.fiveHour), [nil, nil])
+            try TestSupport.assertEqual(presentation.accounts.map(\.weekly), [nil, nil])
+            try TestSupport.assertEqual(
+                presentation.accounts.map { $0.status.text(now: now) },
+                [nil, nil]
+            )
+            try TestSupport.assertEqual(
+                presentation.accounts[0].status.reset(prefix: "5ч", window: nil, now: now),
+                "5ч · —"
+            )
+            try TestSupport.assertEqual(presentation.codex.weekly, nil)
+            try TestSupport.assertEqual(
+                presentation.codex.status.reset(prefix: "7д", window: nil, now: now),
+                "7д · —"
+            )
+            try TestSupport.assertEqual(presentation.codex.status.text(now: now), nil)
             try TestSupport.assertEqual(presentation.lastSuccessfulRefreshAt, nil)
         },
         TestCase(name: "QuotaPresentationTests.testOrbitAccessibilityExplainsInnerAndOuterMeaning") {
@@ -98,6 +124,18 @@ enum QuotaPresentationTests {
                 OrbitGaugeAccessibility.value(inner: nil, outer: nil),
                 "7 дней — нет данных"
             )
+        },
+        TestCase(name: "SettingsViewTests.testLaunchAtLoginNoticeUsesNeutralCopy") {
+            try TestSupport.assertEqual(
+                LaunchAtLoginNotice.updated.text,
+                "Настройка сохранена"
+            )
+            try TestSupport.assertFalse(LaunchAtLoginNotice.updated.isFailure)
+            try TestSupport.assertEqual(
+                LaunchAtLoginNotice.updateFailed.text,
+                "Не удалось изменить настройку"
+            )
+            try TestSupport.assertTrue(LaunchAtLoginNotice.updateFailed.isFailure)
         }
     ]
 

@@ -55,19 +55,31 @@ public enum DashboardCopy {
 
 @_spi(Testing)
 public enum PresentationStatus: Equatable {
+    case loading
     case fresh
     case stale(lastSuccessAt: Date)
     case unavailable
 
     public func text(now: Date) -> String? {
         switch self {
-        case .fresh:
+        case .loading, .fresh:
             nil
         case let .stale(lastSuccessAt):
             QuotaCopy.stale(lastSuccessAt: lastSuccessAt, now: now)
         case .unavailable:
             "нет данных"
         }
+    }
+
+    public func reset(
+        prefix: String,
+        window: QuotaWindow?,
+        now: Date
+    ) -> String {
+        if self == .loading, window == nil {
+            return "\(prefix) · —"
+        }
+        return QuotaCopy.reset(prefix: prefix, window: window, now: now)
     }
 
     public var isStale: Bool {
@@ -119,8 +131,10 @@ public struct DashboardPresentation: Equatable {
             return accountCards(values: values, status: .fresh)
         case let .stale(values, lastSuccessAt, _):
             return accountCards(values: values, status: .stale(lastSuccessAt: lastSuccessAt))
-        case .loading, .unavailable:
-            return placeholderAccounts()
+        case .loading:
+            return placeholderAccounts(status: .loading)
+        case .unavailable:
+            return placeholderAccounts(status: .unavailable)
         }
     }
 
@@ -145,18 +159,26 @@ public struct DashboardPresentation: Equatable {
         return result
     }
 
-    private static func placeholderAccounts() -> [AccountCardPresentation] {
-        [placeholderAccount(slot: 0), placeholderAccount(slot: 1)]
+    private static func placeholderAccounts(
+        status: PresentationStatus
+    ) -> [AccountCardPresentation] {
+        [
+            placeholderAccount(slot: 0, status: status),
+            placeholderAccount(slot: 1, status: status)
+        ]
     }
 
-    private static func placeholderAccount(slot: Int) -> AccountCardPresentation {
+    private static func placeholderAccount(
+        slot: Int,
+        status: PresentationStatus = .unavailable
+    ) -> AccountCardPresentation {
         AccountCardPresentation(
             id: "slot-\(slot + 1)",
             alias: String(format: "%02d", slot + 1),
             isActive: false,
             fiveHour: nil,
             weekly: nil,
-            status: .unavailable
+            status: status
         )
     }
 
@@ -189,7 +211,13 @@ public struct DashboardPresentation: Equatable {
                 creditsBalance: value.creditsBalance,
                 status: .stale(lastSuccessAt: lastSuccessAt)
             )
-        case .loading, .unavailable:
+        case .loading:
+            CodexCardPresentation(
+                weekly: nil,
+                creditsBalance: nil,
+                status: .loading
+            )
+        case .unavailable:
             CodexCardPresentation(
                 weekly: nil,
                 creditsBalance: nil,

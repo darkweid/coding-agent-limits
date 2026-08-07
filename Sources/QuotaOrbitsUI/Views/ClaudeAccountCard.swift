@@ -41,8 +41,8 @@ struct ClaudeAccountCard: View {
             .frame(width: 91, height: 91)
 
             VStack(alignment: .leading, spacing: 3) {
-                resetLine(QuotaCopy.reset(prefix: "5ч", window: account.fiveHour, now: now))
-                resetLine(QuotaCopy.reset(prefix: "7д", window: account.weekly, now: now))
+                resetLine(account.status.reset(prefix: "5ч", window: account.fiveHour, now: now))
+                resetLine(account.status.reset(prefix: "7д", window: account.weekly, now: now))
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
