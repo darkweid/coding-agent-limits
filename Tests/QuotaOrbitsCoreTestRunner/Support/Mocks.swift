@@ -308,6 +308,117 @@ actor NonCancellableClaudeSource: ClaudeQuotaFetching {
     }
 }
 
+actor CancellationAwareClaudeSource: ClaudeQuotaFetching {
+    private let value: [ClaudeAccountQuota]
+    private var startWaiters: [CheckedContinuation<Void, Never>] = []
+    private var firstFetchContinuation: CheckedContinuation<Void, Error>?
+    private(set) var fetchCount = 0
+    private(set) var cancellationCount = 0
+
+    init(value: [ClaudeAccountQuota]) {
+        self.value = value
+    }
+
+    func fetch() async throws -> [ClaudeAccountQuota] {
+        fetchCount += 1
+        let waiters = startWaiters
+        startWaiters.removeAll()
+        waiters.forEach { $0.resume() }
+
+        if fetchCount == 1 {
+            try await withTaskCancellationHandler {
+                try await withCheckedThrowingContinuation { continuation in
+                    firstFetchContinuation = continuation
+                }
+            } onCancel: {
+                Task { await self.cancelFirstFetch() }
+            }
+        }
+        return value
+    }
+
+    func waitUntilFetchStarted() async {
+        if fetchCount > 0 { return }
+        await withCheckedContinuation { continuation in
+            startWaiters.append(continuation)
+        }
+    }
+
+    private func cancelFirstFetch() {
+        guard let firstFetchContinuation else { return }
+        self.firstFetchContinuation = nil
+        cancellationCount += 1
+        firstFetchContinuation.resume(throwing: CancellationError())
+    }
+}
+
+actor LateReturningClaudeSource: ClaudeQuotaFetching {
+    private let value: [ClaudeAccountQuota]
+    private var startWaiters: [CheckedContinuation<Void, Never>] = []
+    private var cancellationContinuation: CheckedContinuation<Void, Never>?
+    private var releaseContinuation: CheckedContinuation<Void, Never>?
+    private(set) var fetchCount = 0
+    private(set) var cancellationCount = 0
+    private(set) var returnCount = 0
+
+    init(value: [ClaudeAccountQuota]) {
+        self.value = value
+    }
+
+    func fetch() async throws -> [ClaudeAccountQuota] {
+        fetchCount += 1
+        let waiters = startWaiters
+        startWaiters.removeAll()
+        waiters.forEach { $0.resume() }
+
+        await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                cancellationContinuation = continuation
+            }
+        } onCancel: {
+            Task { await self.observeCancellation() }
+        }
+        await withCheckedContinuation { continuation in
+            releaseContinuation = continuation
+        }
+        returnCount += 1
+        return value
+    }
+
+    func waitUntilFetchStarted() async {
+        if fetchCount > 0 { return }
+        await withCheckedContinuation { continuation in
+            startWaiters.append(continuation)
+        }
+    }
+
+    func releaseLateValue() {
+        releaseContinuation?.resume()
+        releaseContinuation = nil
+    }
+
+    private func observeCancellation() {
+        guard let cancellationContinuation else { return }
+        self.cancellationContinuation = nil
+        cancellationCount += 1
+        cancellationContinuation.resume()
+    }
+}
+
+actor StableCodexSource: CodexQuotaFetching {
+    private let value: CodexQuota
+    private(set) var fetchCount = 0
+
+    init(value: CodexQuota) {
+        self.value = value
+    }
+
+    func fetch() async throws -> CodexQuota {
+        fetchCount += 1
+        return value
+    }
+}
+
 actor ManualRefreshTimeoutScheduler: RefreshTimeoutScheduling {
     private var nextID = 0
     private var waiters: [Int: (SourceKind, CheckedContinuation<Void, Error>)] = [:]

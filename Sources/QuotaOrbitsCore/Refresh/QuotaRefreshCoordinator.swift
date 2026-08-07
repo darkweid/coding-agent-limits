@@ -110,6 +110,7 @@ public final class QuotaRefreshCoordinator: ObservableObject {
             }
 
             for await completed in group {
+                guard !Task.isCancelled else { continue }
                 switch completed {
                 case let .claude(result): applyClaude(result)
                 case let .codex(result): applyCodex(result)
@@ -218,6 +219,9 @@ private actor SourceFetchGate<Value: Sendable> {
         timeout: Duration,
         timeoutScheduler: any RefreshTimeoutScheduling
     ) async -> Result<Value, FetchFailure> {
+        guard !Task.isCancelled else {
+            return .failure(timeoutFailure())
+        }
         guard inFlight == nil else {
             return .failure(timeoutFailure())
         }
@@ -240,23 +244,27 @@ private actor SourceFetchGate<Value: Sendable> {
         }
 
         let timeoutSource = source
-        return await withCheckedContinuation { continuation in
-            let timeoutTask = Task { [weak self] in
-                do {
-                    try await timeoutScheduler.wait(
-                        for: timeout,
-                        source: timeoutSource
-                    )
-                } catch {
-                    return
+        return await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                let timeoutTask = Task { [weak self] in
+                    do {
+                        try await timeoutScheduler.wait(
+                            for: timeout,
+                            source: timeoutSource
+                        )
+                    } catch {
+                        return
+                    }
+                    await self?.deadlineReached(id: id)
                 }
-                await self?.deadlineReached(id: id)
+                waiter = Waiter(
+                    id: id,
+                    continuation: continuation,
+                    timeoutTask: timeoutTask
+                )
             }
-            waiter = Waiter(
-                id: id,
-                continuation: continuation,
-                timeoutTask: timeoutTask
-            )
+        } onCancel: {
+            Task { await self.callerCancelled(id: id) }
         }
     }
 
@@ -275,6 +283,19 @@ private actor SourceFetchGate<Value: Sendable> {
     private func deadlineReached(id: Int) {
         guard let waiter, waiter.id == id else { return }
         self.waiter = nil
+        if inFlight?.id == id {
+            inFlight?.task.cancel()
+        }
+        waiter.continuation.resume(returning: .failure(timeoutFailure()))
+    }
+
+    private func callerCancelled(id: Int) {
+        guard let waiter, waiter.id == id else { return }
+        self.waiter = nil
+        waiter.timeoutTask.cancel()
+        if inFlight?.id == id {
+            inFlight?.task.cancel()
+        }
         waiter.continuation.resume(returning: .failure(timeoutFailure()))
     }
 

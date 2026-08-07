@@ -29,6 +29,12 @@ enum QuotaRefreshCoordinatorTests {
         },
         TestCase(name: "QuotaRefreshCoordinatorTests.testDeadlineDoesNotJoinNonCancellableFetch") {
             try await testDeadlineDoesNotJoinNonCancellableFetch()
+        },
+        TestCase(name: "QuotaRefreshCoordinatorTests.testDeadlineCancelsSourceAndAllowsFetchAfterCleanup") {
+            try await testDeadlineCancelsSourceAndAllowsFetchAfterCleanup()
+        },
+        TestCase(name: "QuotaRefreshCoordinatorTests.testStopCancelsRefreshWithoutApplyingLateValue") {
+            try await testStopCancelsRefreshWithoutApplyingLateValue()
         }
     ]
 
@@ -240,6 +246,69 @@ enum QuotaRefreshCoordinatorTests {
     }
 
     @MainActor
+    private static func testDeadlineCancelsSourceAndAllowsFetchAfterCleanup() async throws {
+        let claude = CancellationAwareClaudeSource(value: twoClaudeAccounts)
+        let timeoutScheduler = ManualRefreshTimeoutScheduler()
+        let coordinator = QuotaRefreshCoordinator(
+            claude: claude,
+            codex: StableCodexSource(value: codexQuota),
+            ticker: ManualRefreshTicker(),
+            now: { fixedNow },
+            timeout: .seconds(10),
+            timeoutScheduler: timeoutScheduler
+        )
+        let firstCycle = Task { await coordinator.refreshNow() }
+
+        await claude.waitUntilFetchStarted()
+        await timeoutScheduler.waitUntilScheduled(for: .claude)
+        await timeoutScheduler.fire(.claude)
+        await firstCycle.value
+
+        try await waitUntilAsync { await claude.cancellationCount == 1 }
+        for _ in 0..<10_000 {
+            if await claude.fetchCount >= 2 { break }
+            await coordinator.refreshNow()
+            await Task.yield()
+        }
+
+        try TestSupport.assertEqual(await claude.fetchCount, 2)
+        try TestSupport.assertEqual(
+            coordinator.snapshot.claude,
+            .available(twoClaudeAccounts, updatedAt: fixedNow)
+        )
+    }
+
+    @MainActor
+    private static func testStopCancelsRefreshWithoutApplyingLateValue() async throws {
+        let claude = LateReturningClaudeSource(value: twoClaudeAccounts)
+        let ticker = ManualRefreshTicker()
+        let coordinator = QuotaRefreshCoordinator(
+            claude: claude,
+            codex: StableCodexSource(value: codexQuota),
+            ticker: ticker,
+            now: { fixedNow },
+            timeout: .seconds(10),
+            timeoutScheduler: ManualRefreshTimeoutScheduler()
+        )
+
+        coordinator.start()
+        await claude.waitUntilFetchStarted()
+        coordinator.stop()
+
+        try await waitUntilAsync { await claude.cancellationCount == 1 }
+        await coordinator.waitForIdleForTesting()
+        try TestSupport.assertEqual(coordinator.isRefreshing, false)
+        try TestSupport.assertEqual(coordinator.snapshot.claude, .loading)
+
+        await claude.releaseLateValue()
+        try await waitUntilAsync { await claude.returnCount == 1 }
+        for _ in 0..<10 { await Task.yield() }
+
+        try TestSupport.assertEqual(coordinator.snapshot.claude, .loading)
+        ticker.finish()
+    }
+
+    @MainActor
     private static func makeCoordinator(
         claude: any ClaudeQuotaFetching,
         codex: any CodexQuotaFetching,
@@ -264,6 +333,16 @@ enum QuotaRefreshCoordinatorTests {
             await Task.yield()
         }
         throw AssertionFailure(message: "condition was not satisfied")
+    }
+
+    private static func waitUntilAsync(
+        _ condition: @escaping @Sendable () async -> Bool
+    ) async throws {
+        for _ in 0..<10_000 {
+            if await condition() { return }
+            await Task.yield()
+        }
+        throw AssertionFailure(message: "async condition was not satisfied")
     }
 
     private static let fixedNow = Date(timeIntervalSince1970: 1_786_080_000)
