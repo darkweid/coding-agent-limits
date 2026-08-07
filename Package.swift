@@ -8,13 +8,19 @@ let package = Package(
     platforms: [.macOS(.v14)],
     products: [
         .library(name: "QuotaOrbitsCore", targets: ["QuotaOrbitsCore"]),
-        .library(name: "QuotaOrbitsUI", targets: ["QuotaOrbitsUI"])
+        .library(name: "QuotaOrbitsUI", targets: ["QuotaOrbitsUI"]),
+        .executable(name: "QuotaOrbits", targets: ["QuotaOrbits"])
     ],
     targets: [
         .target(name: "QuotaOrbitsCore", swiftSettings: swift5),
         .target(
             name: "QuotaOrbitsUI",
             dependencies: ["QuotaOrbitsCore"],
+            swiftSettings: swift5
+        ),
+        .executableTarget(
+            name: "QuotaOrbits",
+            dependencies: ["QuotaOrbitsCore", "QuotaOrbitsUI"],
             swiftSettings: swift5
         ),
         .executableTarget(
