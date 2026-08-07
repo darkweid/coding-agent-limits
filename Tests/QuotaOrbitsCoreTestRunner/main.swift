@@ -18,6 +18,8 @@ if arguments == ["--emit-large-payload"] {
 let allCases = QuotaModelsTests.cases
     + QuotaFormattingTests.cases
     + ClaudeQuotaSourceTests.cases
+    + CodexAppServerClientTests.cases
+    + CodexQuotaSourceTests.cases
 let selectedCases = allCases.filter { testCase in
     filter.map { testCase.name.localizedCaseInsensitiveContains($0) } ?? true
 }
