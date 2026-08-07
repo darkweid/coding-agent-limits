@@ -125,6 +125,46 @@ enum QuotaPresentationTests {
                 "7 дней — нет данных"
             )
         },
+        TestCase(name: "OrbitGaugeAccessibilityTests.testDoubleRingDistinguishesLoadingFromUnavailable") {
+            try TestSupport.assertEqual(
+                OrbitGaugeAccessibility.value(
+                    inner: nil,
+                    outer: nil,
+                    hasInner: true,
+                    dataState: .loading
+                ),
+                "5 часов — данные загружаются; 7 дней — данные загружаются"
+            )
+            try TestSupport.assertEqual(
+                OrbitGaugeAccessibility.value(
+                    inner: nil,
+                    outer: nil,
+                    hasInner: true,
+                    dataState: .unavailable
+                ),
+                "5 часов — нет данных; 7 дней — нет данных"
+            )
+        },
+        TestCase(name: "OrbitGaugeAccessibilityTests.testSingleRingDistinguishesLoadingFromUnavailable") {
+            try TestSupport.assertEqual(
+                OrbitGaugeAccessibility.value(
+                    inner: nil,
+                    outer: nil,
+                    hasInner: false,
+                    dataState: .loading
+                ),
+                "7 дней — данные загружаются"
+            )
+            try TestSupport.assertEqual(
+                OrbitGaugeAccessibility.value(
+                    inner: nil,
+                    outer: nil,
+                    hasInner: false,
+                    dataState: .unavailable
+                ),
+                "7 дней — нет данных"
+            )
+        },
         TestCase(name: "SettingsViewTests.testLaunchAtLoginNoticeUsesNeutralCopy") {
             try TestSupport.assertEqual(
                 LaunchAtLoginNotice.updated.text,

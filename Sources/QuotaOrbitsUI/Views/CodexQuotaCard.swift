@@ -33,7 +33,8 @@ struct CodexQuotaCard: View {
             .frame(width: 62, alignment: .leading)
 
             OrbitGaugeView(
-                weeklyRemainingPercent: quota.weekly?.remainingPercent
+                weeklyRemainingPercent: quota.weekly?.remainingPercent,
+                dataState: quota.status.gaugeDataState
             )
             .frame(width: 72, height: 72)
 

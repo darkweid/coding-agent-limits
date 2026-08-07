@@ -36,7 +36,8 @@ struct ClaudeAccountCard: View {
 
             OrbitGaugeView(
                 fiveHourRemainingPercent: account.fiveHour?.remainingPercent,
-                weeklyRemainingPercent: account.weekly?.remainingPercent
+                weeklyRemainingPercent: account.weekly?.remainingPercent,
+                dataState: account.status.gaugeDataState
             )
             .frame(width: 91, height: 91)
 

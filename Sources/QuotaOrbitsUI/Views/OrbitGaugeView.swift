@@ -1,6 +1,12 @@
 import QuotaOrbitsCore
 import SwiftUI
 
+public enum OrbitGaugeDataState: Equatable, Sendable {
+    case loading
+    case available
+    case unavailable
+}
+
 @_spi(Testing)
 public enum OrbitGaugeAccessibility {
     public static func label(hasInner: Bool) -> String {
@@ -12,13 +18,31 @@ public enum OrbitGaugeAccessibility {
     public static func value(
         inner: Double?,
         outer: Double?,
-        hasInner: Bool? = nil
+        hasInner: Bool? = nil,
+        dataState: OrbitGaugeDataState? = nil
     ) -> String {
         let includesInner = hasInner ?? (inner != nil)
+        let resolvedState = dataState ?? inferredState(inner: inner, outer: outer)
+        if resolvedState == .loading {
+            let loading = "данные загружаются"
+            guard includesInner else { return "7 дней — \(loading)" }
+            return "5 часов — \(loading); 7 дней — \(loading)"
+        }
+        if resolvedState == .unavailable {
+            guard includesInner else { return "7 дней — нет данных" }
+            return "5 часов — нет данных; 7 дней — нет данных"
+        }
         let weekly = outer.map { "\(QuotaCopy.percent($0)) осталось" } ?? "нет данных"
         guard includesInner else { return "7 дней — \(weekly)" }
         let fiveHour = inner.map { "\(QuotaCopy.percent($0)) осталось" } ?? "нет данных"
         return "5 часов — \(fiveHour); 7 дней — \(weekly)"
+    }
+
+    private static func inferredState(
+        inner: Double?,
+        outer: Double?
+    ) -> OrbitGaugeDataState {
+        inner == nil && outer == nil ? .unavailable : .available
     }
 }
 
@@ -26,20 +50,31 @@ public struct OrbitGaugeView: View {
     private let innerRemainingPercent: Double?
     private let weeklyRemainingPercent: Double?
     private let showsInnerRing: Bool
+    private let dataState: OrbitGaugeDataState
 
-    public init(weeklyRemainingPercent: Double?) {
+    public init(
+        weeklyRemainingPercent: Double?,
+        dataState: OrbitGaugeDataState? = nil
+    ) {
         innerRemainingPercent = nil
         self.weeklyRemainingPercent = weeklyRemainingPercent
         showsInnerRing = false
+        self.dataState = dataState
+            ?? (weeklyRemainingPercent == nil ? .unavailable : .available)
     }
 
     public init(
         fiveHourRemainingPercent: Double?,
-        weeklyRemainingPercent: Double?
+        weeklyRemainingPercent: Double?,
+        dataState: OrbitGaugeDataState? = nil
     ) {
         innerRemainingPercent = fiveHourRemainingPercent
         self.weeklyRemainingPercent = weeklyRemainingPercent
         showsInnerRing = true
+        self.dataState = dataState
+            ?? (fiveHourRemainingPercent == nil && weeklyRemainingPercent == nil
+                ? .unavailable
+                : .available)
     }
 
     public var body: some View {
@@ -60,7 +95,8 @@ public struct OrbitGaugeView: View {
             OrbitGaugeAccessibility.value(
                 inner: innerRemainingPercent,
                 outer: weeklyRemainingPercent,
-                hasInner: showsInnerRing
+                hasInner: showsInnerRing,
+                dataState: dataState
             )
         )
     }

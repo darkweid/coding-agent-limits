@@ -86,6 +86,14 @@ public enum PresentationStatus: Equatable {
         if case .stale = self { return true }
         return false
     }
+
+    public var gaugeDataState: OrbitGaugeDataState {
+        switch self {
+        case .loading: .loading
+        case .fresh, .stale: .available
+        case .unavailable: .unavailable
+        }
+    }
 }
 
 @_spi(Testing)

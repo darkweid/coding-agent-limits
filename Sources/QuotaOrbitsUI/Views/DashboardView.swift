@@ -83,6 +83,7 @@ struct DashboardContentView: View {
             Button(labels[2], action: actions.openSettings)
             Button(labels[3], action: actions.quit)
         }
+        .preferredColorScheme(.dark)
     }
 
     private var panelBackground: some View {
