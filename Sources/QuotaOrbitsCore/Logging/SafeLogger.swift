@@ -15,7 +15,7 @@ public enum FailureCategory: String, Sendable {
 
 public enum SafeLogger {
     private static let logger = Logger(
-        subsystem: "com.quota-orbits.app",
+        subsystem: "io.github.darkweid.coding-agent-limits",
         category: "quota-refresh"
     )
 
