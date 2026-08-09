@@ -42,8 +42,8 @@ struct ClaudeAccountCard: View {
             .frame(width: 91, height: 91)
 
             VStack(alignment: .leading, spacing: 3) {
-                resetLine(account.status.reset(prefix: "5ч", window: account.fiveHour, now: now))
-                resetLine(account.status.reset(prefix: "7д", window: account.weekly, now: now))
+                resetLine("5 hours · \(account.status.resetCountdown(window: account.fiveHour, now: now))")
+                resetLine("7 days · \(account.status.resetCountdown(window: account.weekly, now: now))")
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 

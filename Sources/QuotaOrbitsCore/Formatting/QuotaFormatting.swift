@@ -3,15 +3,15 @@ import Foundation
 public enum ResetCountdownFormatter {
     public static func string(until reset: Date, now: Date = Date()) -> String {
         let totalMinutes = max(0, Int(reset.timeIntervalSince(now)) / 60)
-        guard totalMinutes > 0 else { return "сброс сейчас" }
+        guard totalMinutes > 0 else { return "resets now" }
 
         let totalHours = totalMinutes / 60
         if totalHours >= 24 {
-            return "сброс через \(totalHours / 24)д \(totalHours % 24)ч"
+            return "resets in \(totalHours / 24)d \(totalHours % 24)h"
         }
         if totalHours > 0 {
-            return "сброс через \(totalHours)ч \(totalMinutes % 60)м"
+            return "resets in \(totalHours)h \(totalMinutes % 60)m"
         }
-        return "сброс через \(totalMinutes)м"
+        return "resets in \(totalMinutes)m"
     }
 }

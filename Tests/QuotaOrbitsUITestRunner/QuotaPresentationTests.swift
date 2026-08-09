@@ -10,21 +10,21 @@ enum QuotaPresentationTests {
             try TestSupport.assertEqual(QuotaCopy.percent(28.4), "28%")
             try TestSupport.assertEqual(QuotaCopy.percent(nil), "—")
             try TestSupport.assertEqual(
-                QuotaCopy.reset(prefix: "5ч", window: window(remaining: 28, minutes: 205), now: now),
-                "5ч · сброс через 3ч 25м"
+                QuotaCopy.resetCountdown(window: window(remaining: 28, minutes: 205), now: now),
+                "resets in 3h 25m"
             )
-            try TestSupport.assertEqual(QuotaCopy.reset(prefix: "7д", window: nil, now: now), "7д · нет данных")
-            try TestSupport.assertEqual(QuotaCopy.stale(lastSuccessAt: now.addingTimeInterval(-125), now: now), "обновлено 2 мин назад")
+            try TestSupport.assertEqual(QuotaCopy.resetCountdown(window: nil, now: now), "no data")
+            try TestSupport.assertEqual(QuotaCopy.stale(lastSuccessAt: now.addingTimeInterval(-125), now: now), "updated 2 min ago")
             try TestSupport.assertEqual(QuotaCopy.credits(Decimal(string: "411.5127706250")!), "411.51")
         },
         TestCase(name: "QuotaPresentationTests.testContextActionsUseNeutralApprovedCopy") {
             try TestSupport.assertEqual(
                 DashboardCopy.contextActions(isPinned: true),
-                ["Обновить сейчас", "Переместить", "Настройки…", "Выйти"]
+                ["Refresh Now", "Move", "Settings…", "Quit"]
             )
             try TestSupport.assertEqual(
                 DashboardCopy.contextActions(isPinned: false),
-                ["Обновить сейчас", "Закрепить", "Настройки…", "Выйти"]
+                ["Refresh Now", "Pin", "Settings…", "Quit"]
             )
         },
         TestCase(name: "QuotaPresentationTests.testDashboardProjectionNeverRetainsIdentifiersOrErrors") {
@@ -42,9 +42,9 @@ enum QuotaPresentationTests {
 
             try TestSupport.assertEqual(presentation.accounts.map(\.alias), ["01", "02"])
             try TestSupport.assertEqual(presentation.accounts.map(\.id), ["slot-1", "slot-2"])
-            try TestSupport.assertEqual(presentation.accounts[0].status.text(now: now), "обновлено 2 мин назад")
+            try TestSupport.assertEqual(presentation.accounts[0].status.text(now: now), "updated 2 min ago")
             try TestSupport.assertEqual(presentation.codex.symbol, "◇")
-            try TestSupport.assertEqual(presentation.codex.status.text(now: now), "нет данных")
+            try TestSupport.assertEqual(presentation.codex.status.text(now: now), "no data")
         },
         TestCase(name: "QuotaPresentationTests.testDashboardProjectionKeepsTwoAliasesAndLatestSuccess") {
             let accounts = [
@@ -77,12 +77,12 @@ enum QuotaPresentationTests {
             try TestSupport.assertEqual(presentation.accounts.map(\.alias), ["01", "02"])
             try TestSupport.assertEqual(presentation.accounts.map(\.fiveHour), [nil, nil])
             try TestSupport.assertEqual(presentation.accounts.map(\.weekly), [nil, nil])
-            try TestSupport.assertEqual(presentation.accounts.map { $0.status.text(now: now) }, ["нет данных", "нет данных"])
+            try TestSupport.assertEqual(presentation.accounts.map { $0.status.text(now: now) }, ["no data", "no data"])
             try TestSupport.assertEqual(
-                presentation.accounts[0].status.reset(prefix: "5ч", window: nil, now: now),
-                "5ч · нет данных"
+                presentation.accounts[0].status.resetCountdown(window: nil, now: now),
+                "no data"
             )
-            try TestSupport.assertEqual(presentation.codex.status.text(now: now), "нет данных")
+            try TestSupport.assertEqual(presentation.codex.status.text(now: now), "no data")
             try TestSupport.assertEqual(presentation.lastSuccessfulRefreshAt, nil)
         },
         TestCase(name: "QuotaPresentationTests.testLoadingProjectionKeepsPlaceholdersWithoutFailureCopy") {
@@ -96,13 +96,13 @@ enum QuotaPresentationTests {
                 [nil, nil]
             )
             try TestSupport.assertEqual(
-                presentation.accounts[0].status.reset(prefix: "5ч", window: nil, now: now),
-                "5ч · —"
+                presentation.accounts[0].status.resetCountdown(window: nil, now: now),
+                "—"
             )
             try TestSupport.assertEqual(presentation.codex.weekly, nil)
             try TestSupport.assertEqual(
-                presentation.codex.status.reset(prefix: "7д", window: nil, now: now),
-                "7д · —"
+                presentation.codex.status.resetCountdown(window: nil, now: now),
+                "—"
             )
             try TestSupport.assertEqual(presentation.codex.status.text(now: now), nil)
             try TestSupport.assertEqual(presentation.lastSuccessfulRefreshAt, nil)
@@ -168,12 +168,12 @@ enum QuotaPresentationTests {
         TestCase(name: "SettingsViewTests.testLaunchAtLoginNoticeUsesNeutralCopy") {
             try TestSupport.assertEqual(
                 LaunchAtLoginNotice.updated.text,
-                "Настройка сохранена"
+                "Setting saved"
             )
             try TestSupport.assertFalse(LaunchAtLoginNotice.updated.isFailure)
             try TestSupport.assertEqual(
                 LaunchAtLoginNotice.updateFailed.text,
-                "Не удалось изменить настройку"
+                "Could not change setting"
             )
             try TestSupport.assertTrue(LaunchAtLoginNotice.updateFailed.isFailure)
         }

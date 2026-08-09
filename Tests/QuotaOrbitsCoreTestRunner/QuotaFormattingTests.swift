@@ -10,7 +10,7 @@ enum QuotaFormattingTests {
                     until: now.addingTimeInterval(25 * 60),
                     now: now
                 ),
-                "сброс через 25м"
+                "resets in 25m"
             )
         },
         TestCase(name: "QuotaFormattingTests.testHoursAndMinutes") {
@@ -20,7 +20,7 @@ enum QuotaFormattingTests {
                     until: now.addingTimeInterval((3 * 60 + 25) * 60),
                     now: now
                 ),
-                "сброс через 3ч 25м"
+                "resets in 3h 25m"
             )
         },
         TestCase(name: "QuotaFormattingTests.testDaysAndHoursDropsMinutes") {
@@ -30,14 +30,14 @@ enum QuotaFormattingTests {
                     until: now.addingTimeInterval((2 * 24 + 13) * 3_600),
                     now: now
                 ),
-                "сброс через 2д 13ч"
+                "resets in 2d 13h"
             )
         },
         TestCase(name: "QuotaFormattingTests.testExpiredWindow") {
             let now = Date(timeIntervalSince1970: 1_000_000)
             try TestSupport.assertEqual(
                 ResetCountdownFormatter.string(until: now, now: now),
-                "сброс сейчас"
+                "resets now"
             )
         }
     ]

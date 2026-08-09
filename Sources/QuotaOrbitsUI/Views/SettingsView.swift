@@ -6,8 +6,8 @@ public enum LaunchAtLoginNotice: Equatable, Sendable {
 
     public var text: String {
         switch self {
-        case .updated: "Настройка сохранена"
-        case .updateFailed: "Не удалось изменить настройку"
+        case .updated: "Setting saved"
+        case .updateFailed: "Could not change setting"
         }
     }
 
@@ -36,15 +36,15 @@ public struct SettingsView: View {
 
     public var body: some View {
         Form {
-            Section("Источники") {
-                TextField("Путь 1", text: $cswapPath)
+            Section("Sources") {
+                TextField("Path 1", text: $cswapPath)
                     .textFieldStyle(.roundedBorder)
-                TextField("Путь 2", text: $codexPath)
+                TextField("Path 2", text: $codexPath)
                     .textFieldStyle(.roundedBorder)
             }
 
-            Section("Система") {
-                Toggle("Запускать при входе", isOn: $launchAtLogin)
+            Section("System") {
+                Toggle("Launch at Login", isOn: $launchAtLogin)
                 if let notice = launchAtLoginNotice {
                     Text(notice.text)
                         .font(.caption)

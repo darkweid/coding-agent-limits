@@ -13,14 +13,14 @@ public enum QuotaCopy {
         return "\(number(remainingPercent))%"
     }
 
-    public static func reset(prefix: String, window: QuotaWindow?, now: Date) -> String {
-        guard let window else { return "\(prefix) · нет данных" }
-        return "\(prefix) · \(ResetCountdownFormatter.string(until: window.resetsAt, now: now))"
+    public static func resetCountdown(window: QuotaWindow?, now: Date) -> String {
+        guard let window else { return "no data" }
+        return ResetCountdownFormatter.string(until: window.resetsAt, now: now)
     }
 
     public static func stale(lastSuccessAt: Date, now: Date) -> String {
         let minutes = max(0, Int(now.timeIntervalSince(lastSuccessAt)) / 60)
-        return "обновлено \(minutes) мин назад"
+        return "updated \(minutes) min ago"
     }
 
     public static func credits(_ balance: Decimal) -> String {
@@ -35,9 +35,9 @@ public enum QuotaCopy {
 
     public static func lastRefresh(_ date: Date) -> String {
         let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "ru_RU_POSIX")
+        formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = "HH:mm"
-        return "обновлено \(formatter.string(from: date))"
+        return "updated \(formatter.string(from: date))"
     }
 }
 
@@ -45,10 +45,10 @@ public enum QuotaCopy {
 public enum DashboardCopy {
     public static func contextActions(isPinned: Bool) -> [String] {
         [
-            "Обновить сейчас",
-            isPinned ? "Переместить" : "Закрепить",
-            "Настройки…",
-            "Выйти"
+            "Refresh Now",
+            isPinned ? "Move" : "Pin",
+            "Settings…",
+            "Quit"
         ]
     }
 }
@@ -67,19 +67,18 @@ public enum PresentationStatus: Equatable {
         case let .stale(lastSuccessAt):
             QuotaCopy.stale(lastSuccessAt: lastSuccessAt, now: now)
         case .unavailable:
-            "нет данных"
+            "no data"
         }
     }
 
-    public func reset(
-        prefix: String,
+    public func resetCountdown(
         window: QuotaWindow?,
         now: Date
     ) -> String {
         if self == .loading, window == nil {
-            return "\(prefix) · —"
+            return "—"
         }
-        return QuotaCopy.reset(prefix: prefix, window: window, now: now)
+        return QuotaCopy.resetCountdown(window: window, now: now)
     }
 
     public var isStale: Bool {
