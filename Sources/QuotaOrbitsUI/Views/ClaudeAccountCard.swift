@@ -17,11 +17,11 @@ struct ClaudeAccountCard: View {
     }
 
     private func content(now: Date) -> some View {
-        VStack(spacing: 7) {
+        VStack(spacing: 5) {
             HStack(spacing: 6) {
                 Text(account.alias)
-                    .font(.system(size: 15, weight: .semibold, design: .rounded))
-                    .foregroundStyle(.white)
+                    .font(.system(size: 14, weight: .semibold, design: .rounded))
+                    .foregroundStyle(Color.white.opacity(0.58))
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .minimumScaleFactor(0.72)
@@ -30,39 +30,38 @@ struct ClaudeAccountCard: View {
                     Circle()
                         .fill(QuotaPalette.color(for: .healthy))
                         .frame(width: 6, height: 6)
-                        .accessibilityLabel("Активен")
+                        .accessibilityLabel("Active account")
                 }
             }
 
-            OrbitGaugeView(
-                fiveHourRemainingPercent: account.fiveHour?.remainingPercent,
-                weeklyRemainingPercent: account.weekly?.remainingPercent,
-                dataState: account.status.gaugeDataState
+            QuotaBarView(
+                window: "5 hours",
+                countdown: account.status.resetCountdown(
+                    window: account.fiveHour,
+                    now: now
+                ),
+                remainingPercent: account.fiveHour?.remainingPercent,
+                dataState: account.status.barDataState
             )
-            .frame(width: 91, height: 91)
 
-            VStack(alignment: .leading, spacing: 3) {
-                resetLine("5 hours · \(account.status.resetCountdown(window: account.fiveHour, now: now))")
-                resetLine("7 days · \(account.status.resetCountdown(window: account.weekly, now: now))")
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            QuotaBarView(
+                window: "7 days",
+                countdown: account.status.resetCountdown(
+                    window: account.weekly,
+                    now: now
+                ),
+                remainingPercent: account.weekly?.remainingPercent,
+                dataState: account.status.barDataState
+            )
 
             statusLine(now: now)
         }
-        .padding(10)
+        .padding(9)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(
-            RoundedRectangle(cornerRadius: 19, style: .continuous)
+            RoundedRectangle(cornerRadius: 17, style: .continuous)
                 .fill(Color.white.opacity(0.055))
         )
-    }
-
-    private func resetLine(_ text: String) -> some View {
-        Text(text)
-            .font(.system(size: 9.5, weight: .medium, design: .rounded))
-            .foregroundStyle(Color.white.opacity(0.64))
-            .lineLimit(1)
-            .minimumScaleFactor(0.75)
     }
 
     @ViewBuilder
@@ -82,7 +81,7 @@ struct ClaudeAccountCard: View {
             .foregroundStyle(Color.white.opacity(0.46))
             .frame(maxWidth: .infinity, alignment: .leading)
         } else {
-            Color.clear.frame(height: 11)
+            Color.clear.frame(height: 10)
         }
     }
 }

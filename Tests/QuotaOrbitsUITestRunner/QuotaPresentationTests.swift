@@ -107,62 +107,36 @@ enum QuotaPresentationTests {
             try TestSupport.assertEqual(presentation.codex.status.text(now: now), nil)
             try TestSupport.assertEqual(presentation.lastSuccessfulRefreshAt, nil)
         },
-        TestCase(name: "QuotaPresentationTests.testOrbitAccessibilityExplainsInnerAndOuterMeaning") {
-            try TestSupport.assertEqual(
-                OrbitGaugeAccessibility.label(hasInner: true),
-                "Остаток лимита: внутреннее кольцо 5 часов, внешнее кольцо 7 дней"
-            )
-            try TestSupport.assertEqual(
-                OrbitGaugeAccessibility.value(inner: 28, outer: 93),
-                "5 часов — 28% осталось; 7 дней — 93% осталось"
-            )
-            try TestSupport.assertEqual(
-                OrbitGaugeAccessibility.label(hasInner: false),
-                "Остаток лимита: кольцо 7 дней"
-            )
-            try TestSupport.assertEqual(
-                OrbitGaugeAccessibility.value(inner: nil, outer: nil),
-                "7 дней — нет данных"
-            )
+        TestCase(name: "QuotaBarTests.testNormalizationClampsFillToTrack") {
+            try TestSupport.assertEqual(QuotaBarMetrics.normalized(-5), 0)
+            try TestSupport.assertEqual(QuotaBarMetrics.normalized(43), 43)
+            try TestSupport.assertEqual(QuotaBarMetrics.normalized(105), 100)
+            try TestSupport.assertEqual(QuotaBarMetrics.normalized(nil), 0)
         },
-        TestCase(name: "OrbitGaugeAccessibilityTests.testDoubleRingDistinguishesLoadingFromUnavailable") {
+        TestCase(name: "QuotaBarTests.testAccessibilityDistinguishesAllStates") {
             try TestSupport.assertEqual(
-                OrbitGaugeAccessibility.value(
-                    inner: nil,
-                    outer: nil,
-                    hasInner: true,
+                QuotaBarAccessibility.value(
+                    window: "5 hours",
+                    remaining: 28,
+                    dataState: .available
+                ),
+                "5 hours, 28% remaining"
+            )
+            try TestSupport.assertEqual(
+                QuotaBarAccessibility.value(
+                    window: "7 days",
+                    remaining: nil,
                     dataState: .loading
                 ),
-                "5 часов — данные загружаются; 7 дней — данные загружаются"
+                "7 days, loading"
             )
             try TestSupport.assertEqual(
-                OrbitGaugeAccessibility.value(
-                    inner: nil,
-                    outer: nil,
-                    hasInner: true,
+                QuotaBarAccessibility.value(
+                    window: "7 days",
+                    remaining: nil,
                     dataState: .unavailable
                 ),
-                "5 часов — нет данных; 7 дней — нет данных"
-            )
-        },
-        TestCase(name: "OrbitGaugeAccessibilityTests.testSingleRingDistinguishesLoadingFromUnavailable") {
-            try TestSupport.assertEqual(
-                OrbitGaugeAccessibility.value(
-                    inner: nil,
-                    outer: nil,
-                    hasInner: false,
-                    dataState: .loading
-                ),
-                "7 дней — данные загружаются"
-            )
-            try TestSupport.assertEqual(
-                OrbitGaugeAccessibility.value(
-                    inner: nil,
-                    outer: nil,
-                    hasInner: false,
-                    dataState: .unavailable
-                ),
-                "7 дней — нет данных"
+                "7 days, no data"
             )
         },
         TestCase(name: "SettingsViewTests.testLaunchAtLoginNoticeUsesNeutralCopy") {

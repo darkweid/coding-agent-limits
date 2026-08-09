@@ -17,43 +17,37 @@ struct CodexQuotaCard: View {
     }
 
     private func content(now: Date) -> some View {
-        HStack(spacing: 16) {
-            VStack(alignment: .leading, spacing: 6) {
+        VStack(spacing: 5) {
+            HStack(spacing: 7) {
                 Text(quota.symbol)
-                    .font(.system(size: 22, weight: .medium, design: .rounded))
-                    .foregroundStyle(Color.white.opacity(0.86))
+                    .font(.system(size: 17, weight: .medium, design: .rounded))
+                    .foregroundStyle(Color.white.opacity(0.58))
 
                 if let balance = quota.creditsBalance {
-                    Text(QuotaCopy.credits(balance))
-                        .font(.system(size: 13, weight: .semibold, design: .monospaced))
-                        .foregroundStyle(Color.white.opacity(0.70))
-                        .accessibilityLabel("Баланс \(QuotaCopy.credits(balance))")
+                    Text("credits \(QuotaCopy.credits(balance))")
+                        .font(.system(size: 10, weight: .medium, design: .rounded))
+                        .foregroundStyle(Color.white.opacity(0.38))
+                        .accessibilityLabel("Credits \(QuotaCopy.credits(balance))")
                 }
+                Spacer()
             }
-            .frame(width: 62, alignment: .leading)
 
-            OrbitGaugeView(
-                weeklyRemainingPercent: quota.weekly?.remainingPercent,
-                dataState: quota.status.gaugeDataState
+            QuotaBarView(
+                window: "7 days",
+                countdown: quota.status.resetCountdown(
+                    window: quota.weekly,
+                    now: now
+                ),
+                remainingPercent: quota.weekly?.remainingPercent,
+                dataState: quota.status.barDataState
             )
-            .frame(width: 72, height: 72)
 
-            VStack(alignment: .leading, spacing: 8) {
-                Text("7 days · \(quota.status.resetCountdown(window: quota.weekly, now: now))")
-                    .font(.system(size: 11, weight: .medium, design: .rounded))
-                    .foregroundStyle(Color.white.opacity(0.68))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.75)
-
-                statusLine(now: now)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            statusLine(now: now)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
+        .padding(9)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(
-            RoundedRectangle(cornerRadius: 19, style: .continuous)
+            RoundedRectangle(cornerRadius: 17, style: .continuous)
                 .fill(Color.white.opacity(0.055))
         )
     }
@@ -74,7 +68,7 @@ struct CodexQuotaCard: View {
             .font(.system(size: 9.5, weight: .medium, design: .rounded))
             .foregroundStyle(Color.white.opacity(0.46))
         } else {
-            Color.clear.frame(height: 11)
+            Color.clear.frame(height: 10)
         }
     }
 }

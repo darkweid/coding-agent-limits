@@ -62,15 +62,15 @@ struct DashboardContentView: View {
             }
             .frame(height: 12)
 
-            HStack(spacing: 8) {
+            VStack(spacing: 8) {
                 ForEach(presentation.accounts) { account in
                     ClaudeAccountCard(account: account, fixedNow: fixedNow)
                 }
             }
-            .frame(height: 190)
+            .frame(height: 216)
 
             CodexQuotaCard(quota: presentation.codex, fixedNow: fixedNow)
-                .frame(height: 108)
+                .frame(height: 82)
         }
         .padding(12)
         .frame(width: 350, height: 350)
@@ -141,14 +141,14 @@ private enum DashboardPreviewFixtures {
     )
 
     static let stale = QuotaSnapshot(
-        claude: .stale(accounts, lastSuccessAt: now.addingTimeInterval(-480), message: "недоступно"),
-        codex: .stale(quota, lastSuccessAt: now.addingTimeInterval(-180), message: "недоступно"),
+        claude: .stale(accounts, lastSuccessAt: now.addingTimeInterval(-480), message: "unavailable"),
+        codex: .stale(quota, lastSuccessAt: now.addingTimeInterval(-180), message: "unavailable"),
         lastCycleStartedAt: now
     )
 
     static let unavailable = QuotaSnapshot(
-        claude: .unavailable(message: "недоступно"),
-        codex: .unavailable(message: "недоступно"),
+        claude: .unavailable(message: "unavailable"),
+        codex: .unavailable(message: "unavailable"),
         lastCycleStartedAt: now
     )
 
@@ -187,7 +187,7 @@ private enum DashboardPreviewFixtures {
     static let longAlias = QuotaSnapshot(
         claude: .available(
             [
-                account(id: "one", alias: "необычно-длинное-нейтральное-имя", active: true, fiveHour: 100, weekly: 81),
+                account(id: "one", alias: "unusually-long-neutral-name", active: true, fiveHour: 100, weekly: 81),
                 account(id: "two", alias: "02", active: false, fiveHour: 28, weekly: 93)
             ],
             updatedAt: now
@@ -202,22 +202,22 @@ struct DashboardView_Previews: PreviewProvider {
     static var previews: some View {
         Group {
             preview(snapshot: DashboardPreviewFixtures.available)
-                .previewDisplayName("Обычное")
+                .previewDisplayName("Available")
             preview(snapshot: DashboardPreviewFixtures.available)
                 .environment(\.colorScheme, .light)
-                .previewDisplayName("Светлая система")
+                .previewDisplayName("Light System")
             preview(snapshot: DashboardPreviewFixtures.loading)
-                .previewDisplayName("Загрузка")
+                .previewDisplayName("Loading")
             preview(snapshot: DashboardPreviewFixtures.stale)
-                .previewDisplayName("Устаревшие данные")
+                .previewDisplayName("Stale")
             preview(snapshot: DashboardPreviewFixtures.unavailable)
-                .previewDisplayName("Нет данных")
+                .previewDisplayName("Unavailable")
             preview(snapshot: DashboardPreviewFixtures.thresholdEdges)
-                .previewDisplayName("Границы 19 и 0")
+                .previewDisplayName("Thresholds 19 and 0")
             preview(snapshot: DashboardPreviewFixtures.aliasFallback)
-                .previewDisplayName("Запасные имена")
+                .previewDisplayName("Fallback Aliases")
             preview(snapshot: DashboardPreviewFixtures.longAlias)
-                .previewDisplayName("Длинное имя")
+                .previewDisplayName("Long Alias")
         }
         .previewLayout(.fixed(width: 350, height: 350))
     }
