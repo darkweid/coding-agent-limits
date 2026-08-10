@@ -2,24 +2,27 @@ import Foundation
 
 public enum QuotaLevel: Equatable, Sendable {
     case healthy
-    case low
+    case warning
     case critical
     case unavailable
 
-    public static func classify(remainingPercent: Double?) -> Self {
-        guard let remainingPercent else { return .unavailable }
-        if remainingPercent > 50 { return .healthy }
-        if remainingPercent >= 20 { return .low }
+    public static func classify(usedPercent: Double?) -> Self {
+        guard let usedPercent else { return .unavailable }
+        if usedPercent <= 70 { return .healthy }
+        if usedPercent <= 85 { return .warning }
         return .critical
     }
 }
 
 public struct QuotaWindow: Equatable, Sendable {
+    public let usedPercent: Double
     public let remainingPercent: Double
     public let resetsAt: Date
 
     public init(usedPercent: Double, resetsAt: Date) {
-        self.remainingPercent = min(max(100 - usedPercent, 0), 100)
+        let normalizedUsed = min(max(usedPercent, 0), 100)
+        self.usedPercent = normalizedUsed
+        self.remainingPercent = 100 - normalizedUsed
         self.resetsAt = resetsAt
     }
 }

@@ -18,7 +18,7 @@ public enum QuotaBarMetrics {
 public enum QuotaBarAccessibility {
     public static func value(
         window: String,
-        remaining: Double?,
+        used: Double?,
         dataState: QuotaBarDataState
     ) -> String {
         switch dataState {
@@ -27,8 +27,8 @@ public enum QuotaBarAccessibility {
         case .unavailable:
             return "\(window), no data"
         case .available:
-            guard let remaining else { return "\(window), no data" }
-            return "\(window), \(QuotaCopy.percent(remaining)) remaining"
+            guard let used else { return "\(window), no data" }
+            return "\(window), \(QuotaCopy.percent(used)) used"
         }
     }
 }
@@ -36,7 +36,7 @@ public enum QuotaBarAccessibility {
 struct QuotaBarView: View {
     let window: String
     let countdown: String
-    let remainingPercent: Double?
+    let usedPercent: Double?
     let dataState: QuotaBarDataState
 
     var body: some View {
@@ -50,7 +50,7 @@ struct QuotaBarView: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.72)
                 Spacer(minLength: 4)
-                Text(QuotaCopy.percent(remainingPercent))
+                Text(QuotaCopy.percent(usedPercent))
                     .fontWeight(.semibold)
                     .foregroundStyle(levelColor)
             }
@@ -64,7 +64,7 @@ struct QuotaBarView: View {
                         .fill(levelColor)
                         .frame(
                             width: geometry.size.width
-                                * QuotaBarMetrics.normalized(remainingPercent)
+                                * QuotaBarMetrics.normalized(usedPercent)
                                 / 100
                         )
                 }
@@ -72,11 +72,11 @@ struct QuotaBarView: View {
             .frame(height: 7)
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Quota remaining")
+        .accessibilityLabel("Quota used")
         .accessibilityValue(
             QuotaBarAccessibility.value(
                 window: window,
-                remaining: remainingPercent,
+                used: usedPercent,
                 dataState: dataState
             )
         )
@@ -84,7 +84,7 @@ struct QuotaBarView: View {
 
     private var levelColor: Color {
         QuotaPalette.color(
-            for: QuotaLevel.classify(remainingPercent: remainingPercent)
+            for: QuotaLevel.classify(usedPercent: usedPercent)
         )
     }
 }

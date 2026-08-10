@@ -107,7 +107,7 @@ enum QuotaPresentationTests {
             try TestSupport.assertEqual(presentation.codex.status.text(now: now), nil)
             try TestSupport.assertEqual(presentation.lastSuccessfulRefreshAt, nil)
         },
-        TestCase(name: "QuotaBarTests.testNormalizationClampsFillToTrack") {
+        TestCase(name: "QuotaBarTests.testUsedNormalizationClampsFillToTrack") {
             try TestSupport.assertEqual(QuotaBarMetrics.normalized(-5), 0)
             try TestSupport.assertEqual(QuotaBarMetrics.normalized(43), 43)
             try TestSupport.assertEqual(QuotaBarMetrics.normalized(105), 100)
@@ -117,15 +117,15 @@ enum QuotaPresentationTests {
             try TestSupport.assertEqual(
                 QuotaBarAccessibility.value(
                     window: "5 hours",
-                    remaining: 28,
+                    used: 72,
                     dataState: .available
                 ),
-                "5 hours, 28% remaining"
+                "5 hours, 72% used"
             )
             try TestSupport.assertEqual(
                 QuotaBarAccessibility.value(
                     window: "7 days",
-                    remaining: nil,
+                    used: nil,
                     dataState: .loading
                 ),
                 "7 days, loading"
@@ -133,7 +133,7 @@ enum QuotaPresentationTests {
             try TestSupport.assertEqual(
                 QuotaBarAccessibility.value(
                     window: "7 days",
-                    remaining: nil,
+                    used: nil,
                     dataState: .unavailable
                 ),
                 "7 days, no data"

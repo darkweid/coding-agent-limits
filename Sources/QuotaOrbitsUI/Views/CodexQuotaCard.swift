@@ -38,7 +38,7 @@ struct CodexQuotaCard: View {
                     window: quota.weekly,
                     now: now
                 ),
-                remainingPercent: quota.weekly?.remainingPercent,
+                usedPercent: quota.weekly?.usedPercent,
                 dataState: quota.status.barDataState
             )
 
@@ -58,7 +58,7 @@ struct CodexQuotaCard: View {
             HStack(spacing: 4) {
                 if quota.status.isStale {
                     Circle()
-                        .fill(QuotaPalette.color(for: .low))
+                        .fill(QuotaPalette.color(for: .warning))
                         .frame(width: 5, height: 5)
                 }
                 Text(text)

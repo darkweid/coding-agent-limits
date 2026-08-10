@@ -40,7 +40,7 @@ struct ClaudeAccountCard: View {
                     window: account.fiveHour,
                     now: now
                 ),
-                remainingPercent: account.fiveHour?.remainingPercent,
+                usedPercent: account.fiveHour?.usedPercent,
                 dataState: account.status.barDataState
             )
 
@@ -50,7 +50,7 @@ struct ClaudeAccountCard: View {
                     window: account.weekly,
                     now: now
                 ),
-                remainingPercent: account.weekly?.remainingPercent,
+                usedPercent: account.weekly?.usedPercent,
                 dataState: account.status.barDataState
             )
 
@@ -70,7 +70,7 @@ struct ClaudeAccountCard: View {
             HStack(spacing: 4) {
                 if account.status.isStale {
                     Circle()
-                        .fill(QuotaPalette.color(for: .low))
+                        .fill(QuotaPalette.color(for: .warning))
                         .frame(width: 5, height: 5)
                 }
                 Text(text)
