@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 BUILT_APP="$REPO_ROOT/.build/Quota Orbits.app"
-INSTALL_DIR="/Users/example/Applications"
+INSTALL_DIR="${HOME}/Applications"
 INSTALLED_APP="$INSTALL_DIR/Quota Orbits.app"
 
 "$SCRIPT_DIR/build-app.sh"

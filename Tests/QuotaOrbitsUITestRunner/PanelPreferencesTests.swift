@@ -4,17 +4,46 @@ import Foundation
 
 enum PanelPreferencesTests {
     static let cases: [TestCase] = [
-        TestCase(name: "PanelPreferencesTests.testDefaultPathsMatchApprovedExecutables") {
-            try await withPreferences { preferences, _ in
-                try TestSupport.assertEqual(
-                    preferences.cswapPath,
-                    "/Users/example/.local/bin/cswap"
-                )
-                try TestSupport.assertEqual(
-                    preferences.codexPath,
-                    "/opt/homebrew/bin/codex"
-                )
-            }
+        TestCase(name: "PanelPreferencesTests.testCswapDefaultUsesProvidedHomeDirectory") {
+            let home = URL(fileURLWithPath: "/Users/example", isDirectory: true)
+
+            let result = ExecutablePathResolver.defaultCswapPath(homeDirectory: home)
+
+            try TestSupport.assertEqual(result, "/Users/example/.local/bin/cswap")
+        },
+        TestCase(name: "PanelPreferencesTests.testCodexDefaultPrefersFirstExecutableCandidate") {
+            let home = URL(fileURLWithPath: "/Users/example", isDirectory: true)
+            let executablePaths = Set([
+                "/opt/homebrew/bin/codex",
+                "/usr/local/bin/codex"
+            ])
+
+            let result = ExecutablePathResolver.defaultCodexPath(
+                homeDirectory: home,
+                isExecutable: { executablePaths.contains($0) }
+            )
+
+            try TestSupport.assertEqual(result, "/opt/homebrew/bin/codex")
+        },
+        TestCase(name: "PanelPreferencesTests.testCodexDefaultPrefersUserLocalCandidate") {
+            let home = URL(fileURLWithPath: "/Users/example", isDirectory: true)
+
+            let result = ExecutablePathResolver.defaultCodexPath(
+                homeDirectory: home,
+                isExecutable: { $0 == "/Users/example/.local/bin/codex" }
+            )
+
+            try TestSupport.assertEqual(result, "/Users/example/.local/bin/codex")
+        },
+        TestCase(name: "PanelPreferencesTests.testCodexDefaultFallsBackToUserLocalCandidate") {
+            let home = URL(fileURLWithPath: "/Users/example", isDirectory: true)
+
+            let result = ExecutablePathResolver.defaultCodexPath(
+                homeDirectory: home,
+                isExecutable: { _ in false }
+            )
+
+            try TestSupport.assertEqual(result, "/Users/example/.local/bin/codex")
         },
         TestCase(name: "PanelPreferencesTests.testPanelOriginAndPinnedStateRoundTrip") {
             try await withPreferences { preferences, defaults in

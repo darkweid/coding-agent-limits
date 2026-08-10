@@ -3,8 +3,13 @@ import Foundation
 
 @MainActor
 public final class PanelPreferences: ObservableObject {
-    public static let defaultCswapPath = "/Users/example/.local/bin/cswap"
-    public static let defaultCodexPath = "/opt/homebrew/bin/codex"
+    public static let defaultCswapPath = ExecutablePathResolver.defaultCswapPath(
+        homeDirectory: FileManager.default.homeDirectoryForCurrentUser
+    )
+    public static let defaultCodexPath = ExecutablePathResolver.defaultCodexPath(
+        homeDirectory: FileManager.default.homeDirectoryForCurrentUser,
+        isExecutable: FileManager.default.isExecutableFile(atPath:)
+    )
 
     @Published public var cswapPath: String {
         didSet { defaults.set(cswapPath, forKey: Keys.cswapPath) }
