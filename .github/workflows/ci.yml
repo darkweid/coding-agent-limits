@@ -1,0 +1,80 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  swift-and-app:
+    name: Swift and app
+    runs-on: macos-14
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Lint Swift formatting
+        run: xcrun swift-format lint --recursive --strict Sources Tests Package.swift
+
+      - name: Run core tests
+        run: swift run QuotaOrbitsCoreTestRunner
+
+      - name: Run UI tests
+        run: swift run QuotaOrbitsUITestRunner
+
+      - name: Build with strict concurrency
+        run: >-
+          swift build -c release
+          -Xswiftc -strict-concurrency=complete
+          -Xswiftc -warnings-as-errors
+
+      - name: Verify application bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          plutil -lint Packaging/Info.plist
+          bash scripts/build-app.sh
+          codesign --verify --deep --strict ".build/Quota Orbits.app"
+          identifier="$(plutil -extract CFBundleIdentifier raw ".build/Quota Orbits.app/Contents/Info.plist")"
+          [[ "$identifier" == "io.github.darkweid.coding-agent-limits" ]]
+
+  shell:
+    name: Shell
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Lint shell scripts
+        run: shellcheck scripts/build-app.sh scripts/install-app.sh
+
+  secrets:
+    name: Secrets
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out full history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Scan Git history
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_ENABLE_COMMENTS: "false"
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: "false"
+          GITLEAKS_ENABLE_SUMMARY: "false"
