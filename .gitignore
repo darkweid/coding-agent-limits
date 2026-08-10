@@ -1,16 +1,18 @@
-.worktrees/
-.superpowers/
-/docs/superpowers/
-/*.md
-
+# Swift Package Manager
 .build/
 .swiftpm/
+
+# IDE settings and dev docs
 DerivedData/
 xcuserdata/
 *.xcodeproj/project.xcworkspace/xcuserdata/
 *.xcworkspace/xcuserdata/
 *.xccheckout
 *.xcscmblueprint
-
 .DS_Store
-*.xcuserstate
+.idea
+.worktrees/
+.superpowers/
+docs/superpowers/
+*.md
+!README.md
