@@ -96,6 +96,19 @@ enum PanelPreferencesTests {
             )
 
             try TestSupport.assertEqual(result, CGPoint(x: 1_920, y: 700))
+        },
+        TestCase(name: "PanelWindowLevelTests.testPinnedPanelSitsAboveDesktopIconsAndBelowApps") {
+            let desktopIcons = -20
+            let normalWindows = 0
+
+            let pinned = PanelWindowLevel.pinned(
+                desktopIconLevel: desktopIcons,
+                normalLevel: normalWindows
+            )
+
+            try TestSupport.assertEqual(pinned.rawValue, -19)
+            try TestSupport.assertTrue(pinned.rawValue > desktopIcons)
+            try TestSupport.assertTrue(pinned.rawValue < normalWindows)
         }
     ]
 

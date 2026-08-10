@@ -7,6 +7,25 @@ private final class DesktopPanel: NSPanel {
     override var canBecomeMain: Bool { false }
 }
 
+@_spi(Testing)
+public enum PanelWindowLevel {
+    public static func pinned(
+        desktopIconLevel: Int,
+        normalLevel: Int
+    ) -> NSWindow.Level {
+        NSWindow.Level(
+            rawValue: min(desktopIconLevel + 1, normalLevel - 1)
+        )
+    }
+
+    static var currentPinned: NSWindow.Level {
+        pinned(
+            desktopIconLevel: Int(CGWindowLevelForKey(.desktopIconWindow)),
+            normalLevel: NSWindow.Level.normal.rawValue
+        )
+    }
+}
+
 private final class ScreenObservation: @unchecked Sendable {
     private let center: NotificationCenter
     private var token: NSObjectProtocol?
@@ -30,10 +49,6 @@ private final class ScreenObservation: @unchecked Sendable {
 @MainActor
 public final class DesktopPanelController: NSObject, NSWindowDelegate {
     public static let panelSize = CGSize(width: 350, height: 350)
-
-    private static let desktopLevel = NSWindow.Level(
-        rawValue: Int(CGWindowLevelForKey(.desktopWindow)) + 1
-    )
 
     private let preferences: PanelPreferences
     private let actions: DashboardActions
@@ -143,7 +158,7 @@ public final class DesktopPanelController: NSObject, NSWindowDelegate {
         preferences.isPinned = isPinned
         actions.isPinned = isPinned
         panel.isMovableByWindowBackground = !isPinned
-        panel.level = isPinned ? Self.desktopLevel : .floating
+        panel.level = isPinned ? PanelWindowLevel.currentPinned : .floating
     }
 
     private func clampToCurrentScreens() {
