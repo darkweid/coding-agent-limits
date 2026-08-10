@@ -38,7 +38,7 @@ jobs:
 
       - name: Build with strict concurrency
         run: >-
-          swift build -c release
+          swift build -c release --product QuotaOrbits
           -Xswiftc -strict-concurrency=complete
           -Xswiftc -warnings-as-errors
 
