@@ -15,6 +15,7 @@ if arguments.isEmpty {
 let allCases = QuotaPaletteTests.cases
     + QuotaPresentationTests.cases
     + PanelPreferencesTests.cases
+    + SettingsWindowControllerTests.cases
 let selectedCases = allCases.filter { testCase in
     filter.map { testCase.name.localizedCaseInsensitiveContains($0) } ?? true
 }

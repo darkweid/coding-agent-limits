@@ -10,6 +10,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
 
     private var runtime: AppRuntime?
     private var panelController: DesktopPanelController?
+    private var settingsWindowController: SettingsWindowController?
     private var dashboardActions: DashboardActions?
     private var isTerminationPending = false
     private var didFinishShutdown = false
@@ -89,6 +90,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
                 return
             }
             await runtime?.shutdown()
+            settingsWindowController?.close()
             panelController?.close()
             didFinishShutdown = true
             sender.reply(toApplicationShouldTerminate: true)
@@ -117,11 +119,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     }
 
     private func openSettings() {
-        NSApp.activate(ignoringOtherApps: true)
-        _ = NSApp.sendAction(
-            Selector(("showSettingsWindow:")),
-            to: nil,
-            from: nil
-        )
+        let controller: SettingsWindowController
+        if let settingsWindowController {
+            controller = settingsWindowController
+        } else {
+            controller = SettingsWindowController(rootView: settingsView)
+            settingsWindowController = controller
+        }
+        controller.present()
     }
 }
