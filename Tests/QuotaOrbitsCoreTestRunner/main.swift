@@ -6,6 +6,22 @@ let arguments = Array(CommandLine.arguments.dropFirst())
 if arguments == ["--emit-large-payload"] {
     FileHandle.standardOutput.write(Data(repeating: 0x78, count: 1_000_000))
     exit(0)
+} else if arguments == ["--emit-usage-pty"] {
+    while let line = readLine() {
+        if line == "/usage" {
+            print("Current session")
+            print("9% used")
+            print("Resets 11:59pm (UTC)")
+            print("Current week (all models)")
+            print("20% used")
+            print("Resets Aug 14 at 10:59am (UTC)")
+            print("Esc to exit")
+            fflush(stdout)
+        } else if line == "/exit" {
+            exit(0)
+        }
+    }
+    exit(0)
 } else if arguments.isEmpty {
     filter = nil
 } else if arguments.count == 2, arguments[0] == "--filter" {
@@ -18,10 +34,12 @@ if arguments == ["--emit-large-payload"] {
 let allCases =
     QuotaModelsTests.cases
     + QuotaFormattingTests.cases
-    + ClaudeQuotaSourceTests.cases
+    + ClaudeUsageTerminalParserTests.cases
+    + ClaudeCodeQuotaSourceTests.cases
+    + CswapQuotaSourceTests.cases
     + CodexAppServerClientTests.cases
     + CodexQuotaSourceTests.cases
-    + QuotaRefreshCoordinatorTests.cases
+    + QuotaFeedRefreshCoordinatorTests.cases
     + ReplaceableQuotaSourceTests.cases
     + PrivacyBoundaryTests.cases
 let selectedCases = allCases.filter { testCase in

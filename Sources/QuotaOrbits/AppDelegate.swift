@@ -4,7 +4,7 @@ import SwiftUI
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
-    let preferences = PanelPreferences()
+    let preferences = AppPreferences()
     let launchAtLogin = LaunchAtLoginController()
     @Published private var launchAtLoginNotice: LaunchAtLoginNotice?
 
@@ -17,19 +17,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
 
     var settingsView: some View {
         SettingsView(
+            claudeSourceMode: Binding(
+                get: { [weak self] in self?.preferences.claudeSourceMode ?? .cswap },
+                set: { [weak self] in self?.setClaudeSourceMode($0) }
+            ),
             cswapPath: Binding(
                 get: { [weak self] in
                     self?.preferences.cswapPath
-                        ?? PanelPreferences.defaultCswapPath
+                        ?? AppPreferences.defaultCswapPath
                 },
                 set: { [weak self] in self?.setCswapPath($0) }
+            ),
+            claudePath: Binding(
+                get: { [weak self] in
+                    self?.preferences.claudePath ?? AppPreferences.defaultClaudePath
+                },
+                set: { [weak self] in self?.setClaudePath($0) }
             ),
             codexPath: Binding(
                 get: { [weak self] in
                     self?.preferences.codexPath
-                        ?? PanelPreferences.defaultCodexPath
+                        ?? AppPreferences.defaultCodexPath
                 },
                 set: { [weak self] in self?.setCodexPath($0) }
+            ),
+            refreshIntervalSeconds: Binding(
+                get: { [weak self] in self?.preferences.refreshIntervalSeconds ?? 60 },
+                set: { [weak self] in self?.setRefreshInterval($0) }
+            ),
+            displayMode: Binding(
+                get: { [weak self] in self?.preferences.displayMode ?? .used },
+                set: { [weak self] in self?.preferences.displayMode = $0 }
+            ),
+            visualStyle: Binding(
+                get: { [weak self] in self?.preferences.visualStyle ?? .bars },
+                set: { [weak self] in self?.preferences.visualStyle = $0 }
             ),
             launchAtLogin: Binding(
                 get: { [weak self] in self?.launchAtLogin.isEnabled ?? false },
@@ -106,11 +128,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         }
     }
 
+    private func setClaudeSourceMode(_ mode: ClaudeSourceMode) {
+        if let runtime {
+            runtime.updateClaudeSourceMode(mode)
+        } else {
+            preferences.claudeSourceMode = mode
+        }
+    }
+
+    private func setClaudePath(_ path: String) {
+        if let runtime {
+            runtime.updateClaudePath(path)
+        } else {
+            preferences.claudePath = path
+        }
+    }
+
     private func setCodexPath(_ path: String) {
         if let runtime {
             runtime.updateCodexPath(path)
         } else {
             preferences.codexPath = path
+        }
+    }
+
+    private func setRefreshInterval(_ seconds: Int) {
+        if let runtime {
+            runtime.updateRefreshInterval(seconds)
+        } else {
+            preferences.refreshIntervalSeconds = seconds
         }
     }
 

@@ -4,6 +4,40 @@ import Foundation
 
 enum PanelPreferencesTests {
     static let cases: [TestCase] = [
+        TestCase(name: "AppPreferencesTests.testNewPreferencesUseDocumentedDefaults") {
+            try await withAppPreferences { preferences, _ in
+                try TestSupport.assertEqual(preferences.claudeSourceMode, .cswap)
+                try TestSupport.assertEqual(preferences.refreshIntervalSeconds, 60)
+                try TestSupport.assertEqual(preferences.displayMode, .used)
+                try TestSupport.assertEqual(preferences.visualStyle, .bars)
+            }
+        },
+        TestCase(name: "AppPreferencesTests.testRefreshIntervalClampsAndSnaps") {
+            try await withAppPreferences { preferences, defaults in
+                preferences.refreshIntervalSeconds = 44
+                try TestSupport.assertEqual(preferences.refreshIntervalSeconds, 30)
+                preferences.refreshIntervalSeconds = 589
+                try TestSupport.assertEqual(preferences.refreshIntervalSeconds, 600)
+                defaults.set(731, forKey: "quotaOrbits.refreshIntervalSeconds")
+
+                let restored = AppPreferences(defaults: defaults)
+                try TestSupport.assertEqual(restored.refreshIntervalSeconds, 600)
+            }
+        },
+        TestCase(name: "AppPreferencesTests.testSourceAndDisplayChoicesRoundTrip") {
+            try await withAppPreferences { preferences, defaults in
+                preferences.claudeSourceMode = .nativeClaudeCode
+                preferences.claudePath = "/approved/claude"
+                preferences.displayMode = .remaining
+                preferences.visualStyle = .orbits
+
+                let restored = AppPreferences(defaults: defaults)
+                try TestSupport.assertEqual(restored.claudeSourceMode, .nativeClaudeCode)
+                try TestSupport.assertEqual(restored.claudePath, "/approved/claude")
+                try TestSupport.assertEqual(restored.displayMode, .remaining)
+                try TestSupport.assertEqual(restored.visualStyle, .orbits)
+            }
+        },
         TestCase(name: "PanelPreferencesTests.testCswapDefaultUsesProvidedHomeDirectory") {
             let home = URL(fileURLWithPath: "/Users/example", isDirectory: true)
 
@@ -50,7 +84,7 @@ enum PanelPreferencesTests {
                 preferences.panelOrigin = CGPoint(x: 120, y: 240)
                 preferences.isPinned = false
 
-                let restored = PanelPreferences(defaults: defaults)
+                let restored = AppPreferences(defaults: defaults)
                 try TestSupport.assertEqual(
                     restored.panelOrigin,
                     CGPoint(x: 120, y: 240)
@@ -63,7 +97,7 @@ enum PanelPreferencesTests {
                 preferences.cswapPath = "/approved/cswap"
                 preferences.codexPath = "/approved/codex"
 
-                let restored = PanelPreferences(defaults: defaults)
+                let restored = AppPreferences(defaults: defaults)
                 try TestSupport.assertEqual(restored.cswapPath, "/approved/cswap")
                 try TestSupport.assertEqual(restored.codexPath, "/approved/codex")
 
@@ -143,7 +177,7 @@ enum PanelPreferencesTests {
 
     @MainActor
     private static func withPreferences(
-        _ body: @MainActor (PanelPreferences, UserDefaults) throws -> Void
+        _ body: @MainActor (AppPreferences, UserDefaults) throws -> Void
     ) async throws {
         let suiteName = "QuotaOrbitsUITests.\(UUID().uuidString)"
         guard let defaults = UserDefaults(suiteName: suiteName) else {
@@ -151,6 +185,19 @@ enum PanelPreferencesTests {
         }
         defaults.removePersistentDomain(forName: suiteName)
         defer { defaults.removePersistentDomain(forName: suiteName) }
-        try body(PanelPreferences(defaults: defaults), defaults)
+        try body(AppPreferences(defaults: defaults), defaults)
+    }
+
+    @MainActor
+    private static func withAppPreferences(
+        _ body: @MainActor (AppPreferences, UserDefaults) throws -> Void
+    ) async throws {
+        let suiteName = "QuotaOrbitsUITests.\(UUID().uuidString)"
+        guard let defaults = UserDefaults(suiteName: suiteName) else {
+            throw AssertionFailure(message: "Could not create isolated UserDefaults")
+        }
+        defaults.removePersistentDomain(forName: suiteName)
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        try body(AppPreferences(defaults: defaults), defaults)
     }
 }

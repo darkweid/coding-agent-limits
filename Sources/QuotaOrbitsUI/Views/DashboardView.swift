@@ -25,28 +25,36 @@ public final class DashboardActions: ObservableObject {
 }
 
 public struct DashboardView: View {
-    @ObservedObject private var coordinator: QuotaRefreshCoordinator
+    @ObservedObject private var coordinator: QuotaFeedRefreshCoordinator
+    @ObservedObject private var preferences: AppPreferences
     @ObservedObject private var actions: DashboardActions
 
     @MainActor
     public init(
-        coordinator: QuotaRefreshCoordinator,
+        coordinator: QuotaFeedRefreshCoordinator,
+        preferences: AppPreferences,
         actions: DashboardActions
     ) {
         self.coordinator = coordinator
+        self.preferences = preferences
         self.actions = actions
     }
 
     public var body: some View {
         DashboardContentView(
-            presentation: DashboardPresentation(snapshot: coordinator.snapshot),
+            presentation: QuotaFeedPresentation(
+                snapshot: coordinator.snapshot,
+                displayMode: preferences.displayMode
+            ),
+            visualStyle: preferences.visualStyle,
             actions: actions
         )
     }
 }
 
 struct DashboardContentView: View {
-    let presentation: DashboardPresentation
+    let presentation: QuotaFeedPresentation
+    let visualStyle: QuotaVisualStyle
     @ObservedObject var actions: DashboardActions
     var fixedNow: Date?
 
@@ -62,15 +70,18 @@ struct DashboardContentView: View {
             }
             .frame(height: 12)
 
-            VStack(spacing: 8) {
-                ForEach(presentation.accounts) { account in
-                    ClaudeAccountCard(account: account, fixedNow: fixedNow)
+            ScrollView(.vertical) {
+                LazyVStack(spacing: 8) {
+                    ForEach(presentation.cards) { card in
+                        QuotaAccountCard(
+                            card: card,
+                            visualStyle: visualStyle,
+                            fixedNow: fixedNow
+                        )
+                    }
                 }
             }
-            .frame(height: 216)
-
-            CodexQuotaCard(quota: presentation.codex, fixedNow: fixedNow)
-                .frame(height: 82)
+            .scrollIndicators(.visible)
         }
         .padding(12)
         .frame(width: 350, height: 350)
@@ -95,148 +106,5 @@ struct DashboardContentView: View {
             RoundedRectangle(cornerRadius: 28, style: .continuous)
                 .stroke(Color.white.opacity(0.09), lineWidth: 0.75)
         }
-    }
-}
-
-private enum DashboardPreviewFixtures {
-    static let now = Date(timeIntervalSince1970: 1_800_000_000)
-
-    static func window(remaining: Double, hours: Double) -> QuotaWindow {
-        QuotaWindow(
-            usedPercent: 100 - remaining,
-            resetsAt: now.addingTimeInterval(hours * 3_600)
-        )
-    }
-
-    static func account(
-        id: String,
-        alias: String,
-        active: Bool,
-        fiveHour: Double,
-        weekly: Double
-    ) -> ClaudeAccountQuota {
-        ClaudeAccountQuota(
-            id: id,
-            alias: alias,
-            isActive: active,
-            fiveHour: window(remaining: fiveHour, hours: 3.5),
-            weekly: window(remaining: weekly, hours: 61)
-        )
-    }
-
-    static let accounts = [
-        account(id: "one", alias: "max", active: false, fiveHour: 100, weekly: 81),
-        account(id: "two", alias: "pro", active: true, fiveHour: 28, weekly: 93),
-    ]
-
-    static let quota = CodexQuota(
-        weekly: window(remaining: 50, hours: 72),
-        creditsBalance: Decimal(string: "411.51")
-    )
-
-    static let available = QuotaSnapshot(
-        claude: .available(accounts, updatedAt: now),
-        codex: .available(quota, updatedAt: now),
-        lastCycleStartedAt: now
-    )
-
-    static let stale = QuotaSnapshot(
-        claude: .stale(
-            accounts, lastSuccessAt: now.addingTimeInterval(-480), message: "unavailable"),
-        codex: .stale(quota, lastSuccessAt: now.addingTimeInterval(-180), message: "unavailable"),
-        lastCycleStartedAt: now
-    )
-
-    static let unavailable = QuotaSnapshot(
-        claude: .unavailable(message: "unavailable"),
-        codex: .unavailable(message: "unavailable"),
-        lastCycleStartedAt: now
-    )
-
-    static let loading = QuotaSnapshot.initial
-
-    static let thresholdEdges = QuotaSnapshot(
-        claude: .available(
-            [
-                account(id: "one", alias: "19", active: true, fiveHour: 19, weekly: 0),
-                account(id: "two", alias: "20", active: false, fiveHour: 51, weekly: 20),
-            ],
-            updatedAt: now
-        ),
-        codex: .available(
-            CodexQuota(
-                weekly: window(remaining: 19, hours: 72),
-                creditsBalance: nil
-            ),
-            updatedAt: now
-        ),
-        lastCycleStartedAt: now
-    )
-
-    static let aliasFallback = QuotaSnapshot(
-        claude: .available(
-            [
-                account(id: "one", alias: "", active: true, fiveHour: 100, weekly: 81),
-                account(id: "two", alias: "   ", active: false, fiveHour: 28, weekly: 93),
-            ],
-            updatedAt: now
-        ),
-        codex: .available(quota, updatedAt: now),
-        lastCycleStartedAt: now
-    )
-
-    static let longAlias = QuotaSnapshot(
-        claude: .available(
-            [
-                account(
-                    id: "one", alias: "unusually-long-neutral-name", active: true, fiveHour: 100,
-                    weekly: 81),
-                account(id: "two", alias: "02", active: false, fiveHour: 28, weekly: 93),
-            ],
-            updatedAt: now
-        ),
-        codex: .available(quota, updatedAt: now),
-        lastCycleStartedAt: now
-    )
-}
-
-struct DashboardView_Previews: PreviewProvider {
-    @MainActor
-    static var previews: some View {
-        Group {
-            preview(snapshot: DashboardPreviewFixtures.available)
-                .previewDisplayName("Available")
-            preview(snapshot: DashboardPreviewFixtures.available)
-                .environment(\.colorScheme, .light)
-                .previewDisplayName("Light System")
-            preview(snapshot: DashboardPreviewFixtures.loading)
-                .previewDisplayName("Loading")
-            preview(snapshot: DashboardPreviewFixtures.stale)
-                .previewDisplayName("Stale")
-            preview(snapshot: DashboardPreviewFixtures.unavailable)
-                .previewDisplayName("Unavailable")
-            preview(snapshot: DashboardPreviewFixtures.thresholdEdges)
-                .previewDisplayName("Thresholds 19 and 0")
-            preview(snapshot: DashboardPreviewFixtures.aliasFallback)
-                .previewDisplayName("Fallback Aliases")
-            preview(snapshot: DashboardPreviewFixtures.longAlias)
-                .previewDisplayName("Long Alias")
-        }
-        .previewLayout(.fixed(width: 350, height: 350))
-    }
-
-    @MainActor
-    private static func preview(snapshot: QuotaSnapshot) -> some View {
-        DashboardContentView(
-            presentation: DashboardPresentation(snapshot: snapshot),
-            actions: DashboardActions(
-                isPinned: true,
-                refreshNow: {},
-                togglePinned: {},
-                openSettings: {},
-                quit: {}
-            ),
-            fixedNow: DashboardPreviewFixtures.now
-        )
     }
 }

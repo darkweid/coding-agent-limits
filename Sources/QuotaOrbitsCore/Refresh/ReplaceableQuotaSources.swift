@@ -1,65 +1,50 @@
 import Foundation
 
-public actor ReplaceableClaudeQuotaSource: ClaudeQuotaFetching {
-    private var source: any ClaudeQuotaFetching
-    private var replacementGeneration = 0
-
-    public init(source: any ClaudeQuotaFetching) {
-        self.source = source
-    }
-
-    public func fetch() async throws -> [ClaudeAccountQuota] {
-        let source = source
-        return try await source.fetch()
-    }
-
-    public func replace(
-        with source: any ClaudeQuotaFetching,
-        generation: Int
-    ) {
-        guard generation > replacementGeneration else { return }
-        replacementGeneration = generation
-        self.source = source
-    }
-}
-
-public actor ReplaceableCodexQuotaSource: CodexQuotaFetching {
-    private var source: any CodexQuotaFetching
-    private var transport: any JSONLineTransport
+public actor ReplaceableQuotaSource: QuotaSource {
+    public nonisolated let sourceID: QuotaSourceID
+    public nonisolated let providerID: ProviderID
+    private var source: any QuotaSource
+    private var cleanup: @Sendable () async -> Void
     private var replacementGeneration = 0
 
     public init(
-        source: any CodexQuotaFetching,
-        transport: any JSONLineTransport
+        source: any QuotaSource,
+        cleanup: @escaping @Sendable () async -> Void = {}
     ) {
+        sourceID = source.sourceID
+        providerID = source.providerID
         self.source = source
-        self.transport = transport
+        self.cleanup = cleanup
     }
 
-    public func fetch() async throws -> CodexQuota {
+    public func fetch() async throws -> ProviderQuota {
         let source = source
         return try await source.fetch()
     }
 
     public func replace(
-        source incomingSource: any CodexQuotaFetching,
-        transport incomingTransport: any JSONLineTransport,
-        generation: Int
+        with incomingSource: any QuotaSource,
+        generation: Int,
+        cleanup incomingCleanup: @escaping @Sendable () async -> Void = {}
     ) async {
-        guard generation > replacementGeneration else {
-            await incomingTransport.stop()
+        guard
+            incomingSource.providerID == providerID,
+            generation > replacementGeneration
+        else {
+            await incomingCleanup()
             return
         }
 
         replacementGeneration = generation
-        let priorTransport = transport
+        let priorCleanup = cleanup
         source = incomingSource
-        transport = incomingTransport
-        await priorTransport.stop()
+        cleanup = incomingCleanup
+        await priorCleanup()
     }
 
     public func stop() async {
-        let activeTransport = transport
-        await activeTransport.stop()
+        let activeCleanup = cleanup
+        cleanup = {}
+        await activeCleanup()
     }
 }

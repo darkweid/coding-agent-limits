@@ -5,7 +5,7 @@ import SwiftUI
 public final class SettingsWindowController: NSWindowController {
     public init<Content: View>(rootView: Content) {
         let window = NSWindow(
-            contentRect: CGRect(x: 0, y: 0, width: 430, height: 250),
+            contentRect: CGRect(x: 0, y: 0, width: 460, height: 420),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false

@@ -6,6 +6,116 @@ enum QuotaPresentationTests {
     private static let now = Date(timeIntervalSince1970: 1_000_000)
 
     static let cases: [TestCase] = [
+        TestCase(name: "QuotaFeedPresentationTests.testProjectsUnlimitedAccountsAndScopedLimits") {
+            let snapshot = QuotaFeedSnapshot(entries: [
+                .init(
+                    sourceID: .cswap,
+                    snapshot: .available(
+                        ProviderQuota(
+                            providerID: .claude,
+                            accounts: [
+                                neutralAccount(index: 1),
+                                neutralAccount(index: 2),
+                                neutralAccount(index: 3),
+                            ]
+                        ),
+                        updatedAt: now
+                    )
+                )
+            ])
+
+            let presentation = QuotaFeedPresentation(snapshot: snapshot, displayMode: .used)
+
+            try TestSupport.assertEqual(presentation.cards.count, 3)
+            try TestSupport.assertEqual(presentation.cards.map(\.alias), ["safe", "02", "03"])
+            try TestSupport.assertEqual(
+                presentation.cards[2].limits.map(\.label), ["Weekly", "Fable"]
+            )
+        },
+        TestCase(name: "QuotaFeedPresentationTests.testRemainingChangesValueButNotSeverity") {
+            let limit = QuotaLimit(
+                id: "weekly",
+                label: "Weekly",
+                usedPercent: 90,
+                resetsAt: now.addingTimeInterval(3_600)
+            )
+            let snapshot = QuotaFeedSnapshot(entries: [
+                .init(
+                    sourceID: .codexAppServer,
+                    snapshot: .available(
+                        ProviderQuota(
+                            providerID: .codex,
+                            accounts: [
+                                QuotaAccount(
+                                    id: "private",
+                                    alias: "Codex account",
+                                    isActive: true,
+                                    state: .fresh,
+                                    limits: [limit]
+                                )
+                            ]
+                        ),
+                        updatedAt: now
+                    )
+                )
+            ])
+
+            let presentation = QuotaFeedPresentation(
+                snapshot: snapshot,
+                displayMode: .remaining
+            )
+            let projected = presentation.cards[0].limits[0]
+
+            try TestSupport.assertEqual(projected.displayPercent, 10)
+            try TestSupport.assertEqual(projected.displayMode, .remaining)
+            try TestSupport.assertEqual(projected.level, .critical)
+            try TestSupport.assertEqual(presentation.cards[0].alias, "01")
+            try TestSupport.assertEqual(presentation.cards[0].symbol, .codex)
+        },
+        TestCase(name: "QuotaFeedPresentationTests.testKeepsSourceOrderAndSanitizesFailures") {
+            let snapshot = QuotaFeedSnapshot(entries: [
+                .init(
+                    sourceID: .claudeCode,
+                    snapshot: .stale(
+                        ProviderQuota(
+                            providerID: .claude,
+                            accounts: [neutralAccount(index: 1, alias: "user@example.com")]
+                        ),
+                        lastSuccessAt: now.addingTimeInterval(-120),
+                        message: "private provider output"
+                    )
+                ),
+                .init(
+                    sourceID: .codexAppServer,
+                    snapshot: .unavailable(message: "private transport output")
+                ),
+            ])
+
+            let presentation = QuotaFeedPresentation(snapshot: snapshot, displayMode: .used)
+
+            try TestSupport.assertEqual(presentation.cards.map(\.alias), ["01", "02"])
+            try TestSupport.assertEqual(presentation.cards.map(\.symbol), [.claude, .codex])
+            try TestSupport.assertEqual(
+                presentation.cards[0].status.text(now: now), "updated 2 min ago"
+            )
+            try TestSupport.assertEqual(presentation.cards[1].status.text(now: now), "no data")
+        },
+        TestCase(name: "QuotaFeedPresentationTests.testLoadingUsesNeutralPlaceholders") {
+            let presentation = QuotaFeedPresentation(
+                snapshot: QuotaFeedSnapshot(entries: [
+                    .init(sourceID: .cswap, snapshot: .loading),
+                    .init(sourceID: .codexAppServer, snapshot: .loading),
+                ]),
+                displayMode: .used
+            )
+
+            try TestSupport.assertEqual(presentation.cards.map(\.alias), ["01", "02"])
+            try TestSupport.assertEqual(presentation.cards.map(\.limits), [[], []])
+            try TestSupport.assertEqual(
+                presentation.cards.map { $0.status.text(now: now) }, [nil, nil]
+            )
+            try TestSupport.assertEqual(presentation.lastSuccessfulRefreshAt, nil)
+        },
         TestCase(name: "QuotaPresentationTests.testQuotaCopyFormatsValuesForDisplay") {
             guard let credits = Decimal(string: "411.5127706250") else {
                 throw AssertionFailure(message: "Could not create the credits fixture")
@@ -13,13 +123,18 @@ enum QuotaPresentationTests {
             try TestSupport.assertEqual(QuotaCopy.percent(28.4), "28%")
             try TestSupport.assertEqual(QuotaCopy.percent(nil), "—")
             try TestSupport.assertEqual(
-                QuotaCopy.resetCountdown(window: window(remaining: 28, minutes: 205), now: now),
+                QuotaCopy.resetCountdown(
+                    resetsAt: now.addingTimeInterval(205 * 60),
+                    now: now
+                ),
                 "resets in 3h 25m"
             )
-            try TestSupport.assertEqual(QuotaCopy.resetCountdown(window: nil, now: now), "no data")
+            try TestSupport.assertEqual(
+                QuotaCopy.resetCountdown(resetsAt: nil, now: now), "no data")
             try TestSupport.assertEqual(
                 QuotaCopy.stale(lastSuccessAt: now.addingTimeInterval(-125), now: now),
-                "updated 2 min ago")
+                "updated 2 min ago"
+            )
             try TestSupport.assertEqual(QuotaCopy.credits(credits), "411.51")
         },
         TestCase(name: "QuotaPresentationTests.testContextActionsUseNeutralApprovedCopy") {
@@ -32,178 +147,49 @@ enum QuotaPresentationTests {
                 ["Refresh Now", "Pin", "Settings…", "Quit"]
             )
         },
-        TestCase(
-            name: "QuotaPresentationTests.testDashboardProjectionNeverRetainsIdentifiersOrErrors"
-        ) {
-            let accounts = [
-                account(
-                    id: "private@example.com", alias: "private@example.com", active: true,
-                    inner: 100, outer: 81),
-                account(
-                    id: "second@example.com", alias: "Claude Code", active: false, inner: 28,
-                    outer: 93),
-            ]
-            let snapshot = QuotaSnapshot(
-                claude: .stale(
-                    accounts, lastSuccessAt: now.addingTimeInterval(-120),
-                    message: "token for private@example.com failed"),
-                codex: .unavailable(message: "Codex transport includes technical details"),
-                lastCycleStartedAt: now
-            )
-
-            let presentation = DashboardPresentation(snapshot: snapshot)
-
-            try TestSupport.assertEqual(presentation.accounts.map(\.alias), ["01", "02"])
-            try TestSupport.assertEqual(presentation.accounts.map(\.id), ["slot-1", "slot-2"])
-            try TestSupport.assertEqual(
-                presentation.accounts[0].status.text(now: now), "updated 2 min ago")
-            try TestSupport.assertEqual(presentation.codex.symbol, "◇")
-            try TestSupport.assertEqual(presentation.codex.status.text(now: now), "no data")
-        },
-        TestCase(
-            name: "QuotaPresentationTests.testDashboardProjectionKeepsTwoAliasesAndLatestSuccess"
-        ) {
-            let accounts = [
-                account(id: "one", alias: "max", active: true, inner: 100, outer: 81),
-                account(
-                    id: "two", alias: "очень-длинное-нейтральное-имя", active: false, inner: 28,
-                    outer: 93),
-            ]
-            let snapshot = QuotaSnapshot(
-                claude: .available(accounts, updatedAt: now.addingTimeInterval(-60)),
-                codex: .available(codex(remaining: 50), updatedAt: now),
-                lastCycleStartedAt: now
-            )
-
-            let presentation = DashboardPresentation(snapshot: snapshot)
-
-            try TestSupport.assertEqual(presentation.accounts.count, 2)
-            try TestSupport.assertEqual(
-                presentation.accounts.map(\.alias), ["max", "очень-длинное-нейтральное-имя"])
-            try TestSupport.assertEqual(
-                presentation.accounts.map(\.fiveHour?.remainingPercent), [100, 28])
-            try TestSupport.assertEqual(
-                presentation.accounts.map(\.weekly?.remainingPercent), [81, 93])
-            try TestSupport.assertEqual(presentation.codex.weekly?.remainingPercent, 50)
-            try TestSupport.assertEqual(presentation.lastSuccessfulRefreshAt, now)
-        },
-        TestCase(name: "QuotaPresentationTests.testUnavailableProjectionUsesNeutralPlaceholders") {
-            let presentation = DashboardPresentation(
-                snapshot: QuotaSnapshot(
-                    claude: .unavailable(message: "private failure"),
-                    codex: .unavailable(message: "private failure")
-                )
-            )
-
-            try TestSupport.assertEqual(presentation.accounts.map(\.alias), ["01", "02"])
-            try TestSupport.assertEqual(presentation.accounts.map(\.fiveHour), [nil, nil])
-            try TestSupport.assertEqual(presentation.accounts.map(\.weekly), [nil, nil])
-            try TestSupport.assertEqual(
-                presentation.accounts.map { $0.status.text(now: now) }, ["no data", "no data"])
-            try TestSupport.assertEqual(
-                presentation.accounts[0].status.resetCountdown(window: nil, now: now),
-                "no data"
-            )
-            try TestSupport.assertEqual(presentation.codex.status.text(now: now), "no data")
-            try TestSupport.assertEqual(presentation.lastSuccessfulRefreshAt, nil)
-        },
-        TestCase(
-            name: "QuotaPresentationTests.testLoadingProjectionKeepsPlaceholdersWithoutFailureCopy"
-        ) {
-            let presentation = DashboardPresentation(snapshot: .initial)
-
-            try TestSupport.assertEqual(presentation.accounts.map(\.alias), ["01", "02"])
-            try TestSupport.assertEqual(presentation.accounts.map(\.fiveHour), [nil, nil])
-            try TestSupport.assertEqual(presentation.accounts.map(\.weekly), [nil, nil])
-            try TestSupport.assertEqual(
-                presentation.accounts.map { $0.status.text(now: now) },
-                [nil, nil]
-            )
-            try TestSupport.assertEqual(
-                presentation.accounts[0].status.resetCountdown(window: nil, now: now),
-                "—"
-            )
-            try TestSupport.assertEqual(presentation.codex.weekly, nil)
-            try TestSupport.assertEqual(
-                presentation.codex.status.resetCountdown(window: nil, now: now),
-                "—"
-            )
-            try TestSupport.assertEqual(presentation.codex.status.text(now: now), nil)
-            try TestSupport.assertEqual(presentation.lastSuccessfulRefreshAt, nil)
-        },
-        TestCase(name: "QuotaBarTests.testUsedNormalizationClampsFillToTrack") {
-            try TestSupport.assertEqual(QuotaBarMetrics.normalized(-5), 0)
-            try TestSupport.assertEqual(QuotaBarMetrics.normalized(43), 43)
-            try TestSupport.assertEqual(QuotaBarMetrics.normalized(105), 100)
-            try TestSupport.assertEqual(QuotaBarMetrics.normalized(nil), 0)
-        },
-        TestCase(name: "QuotaBarTests.testAccessibilityDistinguishesAllStates") {
-            try TestSupport.assertEqual(
-                QuotaBarAccessibility.value(
-                    window: "5 hours",
-                    used: 72,
-                    dataState: .available
-                ),
-                "5 hours, 72% used"
-            )
-            try TestSupport.assertEqual(
-                QuotaBarAccessibility.value(
-                    window: "7 days",
-                    used: nil,
-                    dataState: .loading
-                ),
-                "7 days, loading"
-            )
-            try TestSupport.assertEqual(
-                QuotaBarAccessibility.value(
-                    window: "7 days",
-                    used: nil,
-                    dataState: .unavailable
-                ),
-                "7 days, no data"
-            )
+        TestCase(name: "QuotaLimitBarTests.testFillNormalizationStaysInsideTrack") {
+            try TestSupport.assertEqual(QuotaLimitBarMetrics.normalized(-5), 0)
+            try TestSupport.assertEqual(QuotaLimitBarMetrics.normalized(43), 43)
+            try TestSupport.assertEqual(QuotaLimitBarMetrics.normalized(105), 100)
         },
         TestCase(name: "SettingsViewTests.testLaunchAtLoginNoticeUsesNeutralCopy") {
-            try TestSupport.assertEqual(
-                LaunchAtLoginNotice.updated.text,
-                "Setting saved"
-            )
+            try TestSupport.assertEqual(LaunchAtLoginNotice.updated.text, "Setting saved")
             try TestSupport.assertFalse(LaunchAtLoginNotice.updated.isFailure)
             try TestSupport.assertEqual(
-                LaunchAtLoginNotice.updateFailed.text,
-                "Could not change setting"
+                LaunchAtLoginNotice.updateFailed.text, "Could not change setting"
             )
             try TestSupport.assertTrue(LaunchAtLoginNotice.updateFailed.isFailure)
         },
+        TestCase(name: "SettingsViewTests.testSourceVisibilityAndRefreshLabels") {
+            try TestSupport.assertEqual(SettingsPresentation.pathKind(for: .cswap), .cswap)
+            try TestSupport.assertEqual(
+                SettingsPresentation.pathKind(for: .nativeClaudeCode), .claudeCode
+            )
+            try TestSupport.assertEqual(SettingsPresentation.refreshLabel(seconds: 30), "30 sec")
+            try TestSupport.assertEqual(SettingsPresentation.refreshLabel(seconds: 600), "10 min")
+        },
     ]
 
-    private static func window(remaining: Double, minutes: Double = 60) -> QuotaWindow {
-        QuotaWindow(
-            usedPercent: 100 - remaining,
-            resetsAt: now.addingTimeInterval(minutes * 60)
-        )
-    }
-
-    private static func account(
-        id: String,
-        alias: String,
-        active: Bool,
-        inner: Double,
-        outer: Double
-    ) -> ClaudeAccountQuota {
-        ClaudeAccountQuota(
-            id: id,
-            alias: alias,
-            isActive: active,
-            fiveHour: window(remaining: inner),
-            weekly: window(remaining: outer)
-        )
-    }
-
-    private static func codex(remaining: Double) -> CodexQuota {
-        CodexQuota(
-            weekly: window(remaining: remaining),
-            creditsBalance: Decimal(string: "411.5127706250")
+    private static func neutralAccount(index: Int, alias: String? = nil) -> QuotaAccount {
+        QuotaAccount(
+            id: "private-\(index)",
+            alias: alias ?? (index == 1 ? "safe" : ""),
+            isActive: index == 2,
+            state: .fresh,
+            limits: [
+                QuotaLimit(
+                    id: "weekly",
+                    label: "Weekly",
+                    usedPercent: Double(index * 10),
+                    resetsAt: now.addingTimeInterval(3_600)
+                ),
+                QuotaLimit(
+                    id: "fable",
+                    label: "Fable",
+                    usedPercent: Double(index * 20),
+                    resetsAt: now.addingTimeInterval(7_200)
+                ),
+            ]
         )
     }
 }

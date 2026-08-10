@@ -16,6 +16,7 @@ let package = Package(
         .target(
             name: "QuotaOrbitsUI",
             dependencies: ["QuotaOrbitsCore"],
+            resources: [.process("Resources")],
             swiftSettings: swift6
         ),
         .executableTarget(

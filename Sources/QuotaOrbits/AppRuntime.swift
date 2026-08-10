@@ -20,58 +20,45 @@ private final class WorkspaceNotificationBag: @unchecked Sendable {
         tokens.removeAll()
     }
 
-    deinit {
-        removeAll()
-    }
+    deinit { removeAll() }
 }
 
 @MainActor
 final class AppRuntime {
-    let coordinator: QuotaRefreshCoordinator
+    let coordinator: QuotaFeedRefreshCoordinator
 
-    private let preferences: PanelPreferences
-    private let claudeSource: ReplaceableClaudeQuotaSource
-    private let codexSource: ReplaceableCodexQuotaSource
+    private let preferences: AppPreferences
+    private let claudeSource: ReplaceableQuotaSource
+    private let codexSource: ReplaceableQuotaSource
     private let workspaceObservers = WorkspaceNotificationBag(
         center: NSWorkspace.shared.notificationCenter
     )
     private var manualRefreshTask: Task<Void, Never>?
-    private var cswapPathTask: Task<Void, Never>?
-    private var codexPathTask: Task<Void, Never>?
-    private var lifecycleGeneration = 0
-    private var cswapPathGeneration = 0
-    private var codexPathGeneration = 0
+    private var claudeConfigurationTask: Task<Void, Never>?
+    private var codexConfigurationTask: Task<Void, Never>?
+    private var claudeGeneration = 0
+    private var codexGeneration = 0
     private var isAwake = true
     private var isStarted = false
     private var isShuttingDown = false
 
-    init(preferences: PanelPreferences) {
+    init(preferences: AppPreferences) {
         self.preferences = preferences
+        let initialClaude = Self.makeClaudeSource(preferences: preferences)
+        let claudeSlot = ReplaceableQuotaSource(source: initialClaude)
+        claudeSource = claudeSlot
 
-        let claudeSource = ReplaceableClaudeQuotaSource(
-            source: ClaudeQuotaSource(
-                executable: URL(fileURLWithPath: preferences.cswapPath)
-            )
+        let codexComponents = Self.makeCodexSource(path: preferences.codexPath)
+        let codexSlot = ReplaceableQuotaSource(
+            source: codexComponents.source,
+            cleanup: codexComponents.cleanup
         )
-        self.claudeSource = claudeSource
-
-        let transport = ProcessJSONLineTransport(
-            executable: URL(fileURLWithPath: preferences.codexPath),
-            arguments: ["app-server"]
+        codexSource = codexSlot
+        coordinator = QuotaFeedRefreshCoordinator(
+            sources: [claudeSlot, codexSlot],
+            ticker: IntervalTicker(),
+            refreshInterval: .seconds(preferences.refreshIntervalSeconds)
         )
-        let codexSource = ReplaceableCodexQuotaSource(
-            source: CodexQuotaSource(
-                client: CodexAppServerClient(transport: transport)
-            ),
-            transport: transport
-        )
-        self.codexSource = codexSource
-        coordinator = QuotaRefreshCoordinator(
-            claude: claudeSource,
-            codex: codexSource,
-            ticker: MinuteTicker()
-        )
-
         installWorkspaceObservers()
     }
 
@@ -82,8 +69,7 @@ final class AppRuntime {
     }
 
     func requestRefresh() {
-        guard !isShuttingDown, isAwake else { return }
-        guard manualRefreshTask == nil else { return }
+        guard !isShuttingDown, isAwake, manualRefreshTask == nil else { return }
         manualRefreshTask = Task { [weak self] in
             guard let self else { return }
             await coordinator.refreshNow()
@@ -91,57 +77,57 @@ final class AppRuntime {
         }
     }
 
-    func updateCswapPath(_ path: String) {
-        guard !isShuttingDown, path != preferences.cswapPath else { return }
-        preferences.cswapPath = path
-        cswapPathGeneration += 1
-        let generation = cswapPathGeneration
-        cswapPathTask?.cancel()
-        guard isAwake else { return }
-        let source = claudeSource
+    func updateClaudeSourceMode(_ mode: ClaudeSourceMode) {
+        guard mode != preferences.claudeSourceMode else { return }
+        preferences.claudeSourceMode = mode
+        replaceClaudeSource()
+    }
 
-        cswapPathTask = Task { [weak self] in
-            await source.replace(
-                with: ClaudeQuotaSource(
-                    executable: URL(fileURLWithPath: path)
-                ),
-                generation: generation
-            )
-            guard let self, !Task.isCancelled else { return }
-            await refreshAfterReconfiguration()
-            if generation == cswapPathGeneration {
-                cswapPathTask = nil
-            }
-        }
+    func updateCswapPath(_ path: String) {
+        guard path != preferences.cswapPath else { return }
+        preferences.cswapPath = path
+        if preferences.claudeSourceMode == .cswap { replaceClaudeSource() }
+    }
+
+    func updateClaudePath(_ path: String) {
+        guard path != preferences.claudePath else { return }
+        preferences.claudePath = path
+        if preferences.claudeSourceMode == .nativeClaudeCode { replaceClaudeSource() }
     }
 
     func updateCodexPath(_ path: String) {
-        guard !isShuttingDown, path != preferences.codexPath else { return }
+        guard path != preferences.codexPath else { return }
         preferences.codexPath = path
-        codexPathGeneration += 1
-        let generation = codexPathGeneration
-        codexPathTask?.cancel()
-        guard isAwake else { return }
-        let source = codexSource
-
-        codexPathTask = Task { [weak self] in
-            let transport = ProcessJSONLineTransport(
-                executable: URL(fileURLWithPath: path),
-                arguments: ["app-server"]
-            )
-            await source.replace(
-                source: CodexQuotaSource(
-                    client: CodexAppServerClient(transport: transport)
-                ),
-                transport: transport,
-                generation: generation
-            )
-            guard let self, !Task.isCancelled else { return }
-            await refreshAfterReconfiguration()
-            if generation == codexPathGeneration {
-                codexPathTask = nil
+        codexGeneration += 1
+        let generation = codexGeneration
+        codexConfigurationTask?.cancel()
+        guard isAwake, !isShuttingDown else { return }
+        let components = Self.makeCodexSource(path: path)
+        codexConfigurationTask = Task { [weak self] in
+            guard let self else {
+                await components.cleanup()
+                return
             }
+            await coordinator.waitUntilIdle()
+            guard !Task.isCancelled else {
+                await components.cleanup()
+                return
+            }
+            await codexSource.replace(
+                with: components.source,
+                generation: generation,
+                cleanup: components.cleanup
+            )
+            guard !Task.isCancelled else { return }
+            await coordinator.refreshNow()
+            if generation == codexGeneration { codexConfigurationTask = nil }
         }
+    }
+
+    func updateRefreshInterval(_ seconds: Int) {
+        guard seconds != preferences.refreshIntervalSeconds else { return }
+        preferences.refreshIntervalSeconds = seconds
+        coordinator.updateRefreshInterval(.seconds(preferences.refreshIntervalSeconds))
     }
 
     func shutdown() async {
@@ -149,13 +135,28 @@ final class AppRuntime {
         isShuttingDown = true
         isAwake = false
         isStarted = false
-        lifecycleGeneration += 1
         removeWorkspaceObservers()
-        coordinator.stop()
-
-        await cancelRefreshOwningTasks()
-        await waitForCoordinatorToStop()
+        await cancelOwnedTasks()
+        await coordinator.stop()
+        await claudeSource.stop()
         await codexSource.stop()
+    }
+
+    private func replaceClaudeSource() {
+        claudeGeneration += 1
+        let generation = claudeGeneration
+        claudeConfigurationTask?.cancel()
+        guard isAwake, !isShuttingDown else { return }
+        let source = Self.makeClaudeSource(preferences: preferences)
+        claudeConfigurationTask = Task { [weak self] in
+            guard let self else { return }
+            await coordinator.waitUntilIdle()
+            guard !Task.isCancelled else { return }
+            await claudeSource.replace(with: source, generation: generation)
+            guard !Task.isCancelled else { return }
+            await coordinator.refreshNow()
+            if generation == claudeGeneration { claudeConfigurationTask = nil }
+        }
     }
 
     private func installWorkspaceObservers() {
@@ -166,9 +167,7 @@ final class AppRuntime {
                 object: nil,
                 queue: .main
             ) { [weak self] _ in
-                Task { @MainActor [weak self] in
-                    await self?.prepareForSleep()
-                }
+                Task { @MainActor [weak self] in await self?.prepareForSleep() }
             }
         )
         workspaceObservers.append(
@@ -177,9 +176,7 @@ final class AppRuntime {
                 object: nil,
                 queue: .main
             ) { [weak self] _ in
-                Task { @MainActor [weak self] in
-                    await self?.resumeAfterWake()
-                }
+                Task { @MainActor [weak self] in self?.resumeAfterWake() }
             }
         )
     }
@@ -190,82 +187,76 @@ final class AppRuntime {
 
     private func prepareForSleep() async {
         guard !isShuttingDown else { return }
-        lifecycleGeneration += 1
-        let generation = lifecycleGeneration
         isAwake = false
         isStarted = false
-        coordinator.stop()
-        await cancelRefreshOwningTasks()
-        await waitForCoordinatorToStop()
-        guard generation == lifecycleGeneration,
-            !isAwake,
-            !isShuttingDown
-        else { return }
-        await reinstallPersistedSources()
+        await cancelOwnedTasks()
+        await coordinator.stop()
+        await claudeSource.stop()
+        await codexSource.stop()
     }
 
-    private func resumeAfterWake() async {
+    private func resumeAfterWake() {
         guard !isShuttingDown else { return }
-        lifecycleGeneration += 1
-        let generation = lifecycleGeneration
         isAwake = true
-        await waitForCoordinatorToStop()
-        await reinstallPersistedSources()
-        guard generation == lifecycleGeneration,
-            isAwake,
-            !isShuttingDown
-        else { return }
+        reinstallSources()
         isStarted = true
         coordinator.start()
     }
 
-    private func refreshAfterReconfiguration() async {
-        await coordinator.waitUntilIdle()
-        guard !Task.isCancelled, !isShuttingDown, isAwake else { return }
-        await coordinator.refreshNow()
+    private func reinstallSources() {
+        replaceClaudeSource()
+        updateCodexPathAfterWake(preferences.codexPath)
     }
 
-    private func waitForCoordinatorToStop() async {
-        await coordinator.waitUntilIdle()
+    private func updateCodexPathAfterWake(_ path: String) {
+        codexGeneration += 1
+        let generation = codexGeneration
+        let components = Self.makeCodexSource(path: path)
+        codexConfigurationTask = Task { [weak self] in
+            guard let self else {
+                await components.cleanup()
+                return
+            }
+            await codexSource.replace(
+                with: components.source,
+                generation: generation,
+                cleanup: components.cleanup
+            )
+            if generation == codexGeneration { codexConfigurationTask = nil }
+        }
     }
 
-    private func cancelRefreshOwningTasks() async {
-        let pendingManualRefresh = manualRefreshTask
-        let pendingCswapPath = cswapPathTask
-        let pendingCodexPath = codexPathTask
-        pendingManualRefresh?.cancel()
-        pendingCswapPath?.cancel()
-        pendingCodexPath?.cancel()
-        await pendingManualRefresh?.value
-        await pendingCswapPath?.value
-        await pendingCodexPath?.value
-        self.manualRefreshTask = nil
-        self.cswapPathTask = nil
-        self.codexPathTask = nil
+    private func cancelOwnedTasks() async {
+        let tasks = [manualRefreshTask, claudeConfigurationTask, codexConfigurationTask]
+        tasks.forEach { $0?.cancel() }
+        for task in tasks { await task?.value }
+        manualRefreshTask = nil
+        claudeConfigurationTask = nil
+        codexConfigurationTask = nil
     }
 
-    private func reinstallPersistedSources() async {
-        cswapPathGeneration += 1
-        let cswapGeneration = cswapPathGeneration
-        await claudeSource.replace(
-            with: ClaudeQuotaSource(
-                executable: URL(fileURLWithPath: preferences.cswapPath)
-            ),
-            generation: cswapGeneration
-        )
+    private static func makeClaudeSource(preferences: AppPreferences) -> any QuotaSource {
+        switch preferences.claudeSourceMode {
+        case .cswap:
+            CswapQuotaSource(executable: URL(fileURLWithPath: preferences.cswapPath))
+        case .nativeClaudeCode:
+            ClaudeCodeQuotaSource(executable: URL(fileURLWithPath: preferences.claudePath))
+        }
+    }
 
-        codexPathGeneration += 1
-        let codexGeneration = codexPathGeneration
+    private static func makeCodexSource(path: String) -> (
+        source: any QuotaSource,
+        cleanup: @Sendable () async -> Void
+    ) {
         let transport = ProcessJSONLineTransport(
-            executable: URL(fileURLWithPath: preferences.codexPath),
+            executable: URL(fileURLWithPath: path),
             arguments: ["app-server"]
         )
-        await codexSource.replace(
-            source: CodexQuotaSource(
+        return (
+            CodexAppServerQuotaSource(
                 client: CodexAppServerClient(transport: transport)
             ),
-            transport: transport,
-            generation: codexGeneration
+            { await transport.stop() }
         )
     }
 }

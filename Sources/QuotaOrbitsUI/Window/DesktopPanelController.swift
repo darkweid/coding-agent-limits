@@ -50,15 +50,15 @@ private final class ScreenObservation: @unchecked Sendable {
 public final class DesktopPanelController: NSObject, NSWindowDelegate {
     public static let panelSize = CGSize(width: 350, height: 350)
 
-    private let preferences: PanelPreferences
+    private let preferences: AppPreferences
     private let actions: DashboardActions
     private let panel: NSPanel
     private var screenObservation: ScreenObservation?
 
     public init(
-        coordinator: QuotaRefreshCoordinator,
+        coordinator: QuotaFeedRefreshCoordinator,
         actions: DashboardActions,
-        preferences: PanelPreferences
+        preferences: AppPreferences
     ) {
         self.preferences = preferences
         self.actions = actions
@@ -104,6 +104,7 @@ public final class DesktopPanelController: NSObject, NSWindowDelegate {
         panel.contentViewController = NSHostingController(
             rootView: DashboardView(
                 coordinator: coordinator,
+                preferences: preferences,
                 actions: actions
             )
         )
