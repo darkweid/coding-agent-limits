@@ -18,10 +18,15 @@ enum QuotaRefreshCoordinatorTests {
         TestCase(name: "QuotaRefreshCoordinatorTests.testManualRefreshRunsWithoutStartingTicker") {
             try await testManualRefreshRunsWithoutStartingTicker()
         },
-        TestCase(name: "QuotaRefreshCoordinatorTests.testCompletedSourceIsAppliedBeforeOtherSourceFinishes") {
+        TestCase(
+            name:
+                "QuotaRefreshCoordinatorTests.testCompletedSourceIsAppliedBeforeOtherSourceFinishes"
+        ) {
             try await testCompletedSourceIsAppliedBeforeOtherSourceFinishes()
         },
-        TestCase(name: "QuotaRefreshCoordinatorTests.testManualTickerDrivesDeterministicSubsequentCycle") {
+        TestCase(
+            name: "QuotaRefreshCoordinatorTests.testManualTickerDrivesDeterministicSubsequentCycle"
+        ) {
             try await testManualTickerDrivesDeterministicSubsequentCycle()
         },
         TestCase(name: "QuotaRefreshCoordinatorTests.testUnknownErrorDetailsAreNotExposed") {
@@ -30,12 +35,16 @@ enum QuotaRefreshCoordinatorTests {
         TestCase(name: "QuotaRefreshCoordinatorTests.testDeadlineDoesNotJoinNonCancellableFetch") {
             try await testDeadlineDoesNotJoinNonCancellableFetch()
         },
-        TestCase(name: "QuotaRefreshCoordinatorTests.testDeadlineCancelsSourceAndAllowsFetchAfterCleanup") {
+        TestCase(
+            name: "QuotaRefreshCoordinatorTests.testDeadlineCancelsSourceAndAllowsFetchAfterCleanup"
+        ) {
             try await testDeadlineCancelsSourceAndAllowsFetchAfterCleanup()
         },
-        TestCase(name: "QuotaRefreshCoordinatorTests.testStopCancelsRefreshWithoutApplyingLateValue") {
+        TestCase(
+            name: "QuotaRefreshCoordinatorTests.testStopCancelsRefreshWithoutApplyingLateValue"
+        ) {
             try await testStopCancelsRefreshWithoutApplyingLateValue()
-        }
+        },
     ]
 
     @MainActor
@@ -86,7 +95,7 @@ enum QuotaRefreshCoordinatorTests {
     private static func testFailureAfterSuccessKeepsStaleValue() async throws {
         let claude = SequencedClaudeSource([
             .success(twoClaudeAccounts),
-            .failure(.fixture("timeout"))
+            .failure(.fixture("timeout")),
         ])
         let coordinator = makeCoordinator(
             claude: claude,
@@ -163,7 +172,7 @@ enum QuotaRefreshCoordinatorTests {
         let ticker = ManualRefreshTicker()
         let claude = SequencedClaudeSource([
             .success(twoClaudeAccounts),
-            .failure(.fixture("second cycle failed"))
+            .failure(.fixture("second cycle failed")),
         ])
         let codex = SequencedCodexSource([.success(codexQuota), .success(codexQuota)])
         let coordinator = makeCoordinator(claude: claude, codex: codex, ticker: ticker)
@@ -212,7 +221,7 @@ enum QuotaRefreshCoordinatorTests {
         )
         let codex = SequencedCodexSource([
             .success(codexQuota),
-            .success(secondCodexQuota)
+            .success(secondCodexQuota),
         ])
         let timeoutScheduler = ManualRefreshTimeoutScheduler()
         let coordinator = QuotaRefreshCoordinator(
@@ -361,7 +370,7 @@ enum QuotaRefreshCoordinatorTests {
             isActive: false,
             fiveHour: QuotaWindow(usedPercent: 40, resetsAt: reset),
             weekly: QuotaWindow(usedPercent: 50, resetsAt: reset)
-        )
+        ),
     ]
     private static let codexQuota = CodexQuota(
         weekly: QuotaWindow(usedPercent: 35, resetsAt: reset),

@@ -48,7 +48,7 @@ public enum DashboardCopy {
             "Refresh Now",
             isPinned ? "Move" : "Pin",
             "Settings…",
-            "Quit"
+            "Quit",
         ]
     }
 }
@@ -124,7 +124,7 @@ public struct DashboardPresentation: Equatable {
         codex = Self.codex(from: snapshot.codex)
         lastSuccessfulRefreshAt = [
             Self.successDate(from: snapshot.claude),
-            Self.successDate(from: snapshot.codex)
+            Self.successDate(from: snapshot.codex),
         ]
         .compactMap { $0 }
         .max()
@@ -171,7 +171,7 @@ public struct DashboardPresentation: Equatable {
     ) -> [AccountCardPresentation] {
         [
             placeholderAccount(slot: 0, status: status),
-            placeholderAccount(slot: 1, status: status)
+            placeholderAccount(slot: 1, status: status),
         ]
     }
 
@@ -194,8 +194,8 @@ public struct DashboardPresentation: Equatable {
         let lowered = trimmed.lowercased()
         let forbiddenFragments = ["claude", "codex"]
         guard !trimmed.isEmpty,
-              !trimmed.contains("@"),
-              !forbiddenFragments.contains(where: lowered.contains)
+            !trimmed.contains("@"),
+            !forbiddenFragments.contains(where: lowered.contains)
         else {
             return String(format: "%02d", slot + 1)
         }

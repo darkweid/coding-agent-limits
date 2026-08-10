@@ -4,17 +4,46 @@ import Foundation
 
 enum PanelPreferencesTests {
     static let cases: [TestCase] = [
-        TestCase(name: "PanelPreferencesTests.testDefaultPathsMatchApprovedExecutables") {
-            try await withPreferences { preferences, _ in
-                try TestSupport.assertEqual(
-                    preferences.cswapPath,
-                    "/Users/example/.local/bin/cswap"
-                )
-                try TestSupport.assertEqual(
-                    preferences.codexPath,
-                    "/opt/homebrew/bin/codex"
-                )
-            }
+        TestCase(name: "PanelPreferencesTests.testCswapDefaultUsesProvidedHomeDirectory") {
+            let home = URL(fileURLWithPath: "/Users/example", isDirectory: true)
+
+            let result = ExecutablePathResolver.defaultCswapPath(homeDirectory: home)
+
+            try TestSupport.assertEqual(result, "/Users/example/.local/bin/cswap")
+        },
+        TestCase(name: "PanelPreferencesTests.testCodexDefaultPrefersFirstExecutableCandidate") {
+            let home = URL(fileURLWithPath: "/Users/example", isDirectory: true)
+            let executablePaths = Set([
+                "/opt/homebrew/bin/codex",
+                "/usr/local/bin/codex",
+            ])
+
+            let result = ExecutablePathResolver.defaultCodexPath(
+                homeDirectory: home,
+                isExecutable: { executablePaths.contains($0) }
+            )
+
+            try TestSupport.assertEqual(result, "/opt/homebrew/bin/codex")
+        },
+        TestCase(name: "PanelPreferencesTests.testCodexDefaultPrefersUserLocalCandidate") {
+            let home = URL(fileURLWithPath: "/Users/example", isDirectory: true)
+
+            let result = ExecutablePathResolver.defaultCodexPath(
+                homeDirectory: home,
+                isExecutable: { $0 == "/Users/example/.local/bin/codex" }
+            )
+
+            try TestSupport.assertEqual(result, "/Users/example/.local/bin/codex")
+        },
+        TestCase(name: "PanelPreferencesTests.testCodexDefaultFallsBackToUserLocalCandidate") {
+            let home = URL(fileURLWithPath: "/Users/example", isDirectory: true)
+
+            let result = ExecutablePathResolver.defaultCodexPath(
+                homeDirectory: home,
+                isExecutable: { _ in false }
+            )
+
+            try TestSupport.assertEqual(result, "/Users/example/.local/bin/codex")
         },
         TestCase(name: "PanelPreferencesTests.testPanelOriginAndPinnedStateRoundTrip") {
             try await withPreferences { preferences, defaults in
@@ -47,7 +76,7 @@ enum PanelPreferencesTests {
                     persistedKeys,
                     Set([
                         "quotaOrbits.cswapPath",
-                        "quotaOrbits.codexPath"
+                        "quotaOrbits.codexPath",
                     ])
                 )
             }
@@ -71,7 +100,7 @@ enum PanelPreferencesTests {
                         "quotaOrbits.codexPath",
                         "quotaOrbits.panelOrigin.x",
                         "quotaOrbits.panelOrigin.y",
-                        "quotaOrbits.isPinned"
+                        "quotaOrbits.isPinned",
                     ])
                 )
             }
@@ -91,7 +120,7 @@ enum PanelPreferencesTests {
                 panelSize: CGSize(width: 350, height: 350),
                 screenFrames: [
                     CGRect(x: 0, y: 0, width: 1_440, height: 900),
-                    CGRect(x: 1_920, y: 0, width: 1_080, height: 1_920)
+                    CGRect(x: 1_920, y: 0, width: 1_080, height: 1_920),
                 ]
             )
 
@@ -109,7 +138,7 @@ enum PanelPreferencesTests {
             try TestSupport.assertEqual(pinned.rawValue, -19)
             try TestSupport.assertTrue(pinned.rawValue > desktopIcons)
             try TestSupport.assertTrue(pinned.rawValue < normalWindows)
-        }
+        },
     ]
 
     @MainActor

@@ -198,8 +198,9 @@ final class AppRuntime {
         await cancelRefreshOwningTasks()
         await waitForCoordinatorToStop()
         guard generation == lifecycleGeneration,
-              !isAwake,
-              !isShuttingDown else { return }
+            !isAwake,
+            !isShuttingDown
+        else { return }
         await reinstallPersistedSources()
     }
 
@@ -211,8 +212,9 @@ final class AppRuntime {
         await waitForCoordinatorToStop()
         await reinstallPersistedSources()
         guard generation == lifecycleGeneration,
-              isAwake,
-              !isShuttingDown else { return }
+            isAwake,
+            !isShuttingDown
+        else { return }
         isStarted = true
         coordinator.start()
     }

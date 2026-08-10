@@ -356,7 +356,7 @@ private func sanitizeFetchError(_ error: Error) -> FetchFailure {
                 message: "Quota command failed.",
                 category: .exitCode
             )
-        case .invalidResponse, .expectedTwoAccounts:
+        case .invalidResponse:
             return invalidResponseFailure()
         }
     }

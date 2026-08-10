@@ -4,7 +4,9 @@ import QuotaOrbitsCore
 enum CodexQuotaSourceTests {
     static let cases: [TestCase] = [
         TestCase(name: "CodexQuotaSourceTests.testFetchPrefersNamedCodexBucket") {
-            let response = Data(#"{"id":2,"result":{"rateLimits":{"primary":{"usedPercent":90,"windowDurationMins":300,"resetsAt":100}},"rateLimitsByLimitId":{"codex":{"primary":{"usedPercent":25,"windowDurationMins":10080,"resetsAt":200}}}}}"#.utf8)
+            let response = Data(
+                #"{"id":2,"result":{"rateLimits":{"primary":{"usedPercent":90,"windowDurationMins":300,"resetsAt":100}},"rateLimitsByLimitId":{"codex":{"primary":{"usedPercent":25,"windowDurationMins":10080,"resetsAt":200}}}}}"#
+                    .utf8)
 
             let quota = try await source(response: response).fetch()
 
@@ -12,7 +14,9 @@ enum CodexQuotaSourceTests {
             try TestSupport.assertEqual(quota.weekly.resetsAt, Date(timeIntervalSince1970: 200))
         },
         TestCase(name: "CodexQuotaSourceTests.testFetchFallsBackToLegacyRateLimits") {
-            let response = Data(#"{"id":2,"result":{"rateLimits":{"primary":{"usedPercent":40,"windowDurationMins":10080,"resetsAt":300}}}}"#.utf8)
+            let response = Data(
+                #"{"id":2,"result":{"rateLimits":{"primary":{"usedPercent":40,"windowDurationMins":10080,"resetsAt":300}}}}"#
+                    .utf8)
 
             let quota = try await source(response: response).fetch()
 
@@ -34,7 +38,8 @@ enum CodexQuotaSourceTests {
             )
         },
         TestCase(name: "CodexQuotaSourceTests.testFetchRejectsMissingPrimary") {
-            let response = Data(#"{"id":2,"result":{"rateLimits":{"credits":{"balance":"99"}}}}"#.utf8)
+            let response = Data(
+                #"{"id":2,"result":{"rateLimits":{"credits":{"balance":"99"}}}}"#.utf8)
 
             try await TestSupport.assertThrowsErrorAsync(
                 try await source(response: response).fetch()
@@ -46,7 +51,9 @@ enum CodexQuotaSourceTests {
             }
         },
         TestCase(name: "CodexQuotaSourceTests.testMalformedResponseErrorIsSanitized") {
-            let response = Data(#"{"id":2,"result":{"rateLimits":{"primary":{"usedPercent":"token=super-secret","windowDurationMins":10080,"resetsAt":300}}}}"#.utf8)
+            let response = Data(
+                #"{"id":2,"result":{"rateLimits":{"primary":{"usedPercent":"token=super-secret","windowDurationMins":10080,"resetsAt":300}}}}"#
+                    .utf8)
 
             try await TestSupport.assertThrowsErrorAsync(
                 try await source(response: response).fetch()
@@ -56,7 +63,7 @@ enum CodexQuotaSourceTests {
                     String(describing: error).contains("super-secret")
                 )
             }
-        }
+        },
     ]
 
     private static func source(response: Data) -> CodexQuotaSource {

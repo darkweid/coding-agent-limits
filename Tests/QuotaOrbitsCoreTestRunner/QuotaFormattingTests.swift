@@ -39,6 +39,6 @@ enum QuotaFormattingTests {
                 ResetCountdownFormatter.string(until: now, now: now),
                 "resets now"
             )
-        }
+        },
     ]
 }

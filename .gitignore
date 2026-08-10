@@ -1,6 +1,16 @@
 .worktrees/
 .superpowers/
+/docs/superpowers/
+/*.md
+
 .build/
 .swiftpm/
+DerivedData/
+xcuserdata/
+*.xcodeproj/project.xcworkspace/xcuserdata/
+*.xcworkspace/xcuserdata/
+*.xccheckout
+*.xcscmblueprint
+
 .DS_Store
 *.xcuserstate

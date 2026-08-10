@@ -65,7 +65,8 @@ public final class DesktopPanelController: NSObject, NSWindowDelegate {
 
         let size = Self.panelSize
         let screens = NSScreen.screens.map(\.visibleFrame)
-        let fallbackFrame = NSScreen.main?.visibleFrame
+        let fallbackFrame =
+            NSScreen.main?.visibleFrame
             ?? screens.first
             ?? CGRect(origin: .zero, size: size)
         let fallbackOrigin = CGPoint(
@@ -98,7 +99,7 @@ public final class DesktopPanelController: NSObject, NSWindowDelegate {
         panel.collectionBehavior = [
             .canJoinAllSpaces,
             .stationary,
-            .ignoresCycle
+            .ignoresCycle,
         ]
         panel.contentViewController = NSHostingController(
             rootView: DashboardView(

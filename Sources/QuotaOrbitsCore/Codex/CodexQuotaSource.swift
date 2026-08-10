@@ -28,7 +28,8 @@ public actor CodexQuotaSource: CodexQuotaFetching {
             throw CodexQuotaError.invalidResponse
         }
 
-        let bucket = response.result.rateLimitsByLimitId?["codex"]
+        let bucket =
+            response.result.rateLimitsByLimitId?["codex"]
             ?? response.result.rateLimits
         guard let primary = bucket?.primary else {
             throw CodexQuotaError.missingPrimaryWindow
@@ -39,7 +40,7 @@ public actor CodexQuotaSource: CodexQuotaFetching {
                 resetsAt: Date(timeIntervalSince1970: primary.resetsAt)
             ),
             creditsBalance: bucket?.credits?.balance.flatMap {
-                Decimal(string: $0)
+                Decimal(string: $0, locale: Locale(identifier: "en_US_POSIX"))
             }
         )
     }

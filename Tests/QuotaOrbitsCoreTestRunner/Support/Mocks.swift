@@ -90,8 +90,9 @@ actor ScriptedJSONLineTransport: JSONLineTransport {
 
     func sentMessages() -> [ScriptedSentMessage] {
         sent.compactMap {
-            guard let object = try? JSONSerialization.jsonObject(with: $0)
-                as? [String: Any]
+            guard
+                let object = try? JSONSerialization.jsonObject(with: $0)
+                    as? [String: Any]
             else { return nil }
             let params = object["params"] as? [String: Any]
             let clientInfo = params?["clientInfo"] as? [String: Any]
@@ -422,9 +423,7 @@ actor StableCodexSource: CodexQuotaFetching {
 actor ManualRefreshTimeoutScheduler: RefreshTimeoutScheduling {
     private var nextID = 0
     private var waiters: [Int: (SourceKind, CheckedContinuation<Void, Error>)] = [:]
-    private var scheduleWaiters: [
-        (SourceKind, CheckedContinuation<Void, Never>)
-    ] = []
+    private var scheduleWaiters: [(SourceKind, CheckedContinuation<Void, Never>)] = []
 
     func wait(for duration: Duration, source: SourceKind) async throws {
         nextID += 1

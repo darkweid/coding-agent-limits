@@ -91,7 +91,7 @@ public actor CodexAppServerClient {
                 "clientInfo": [
                     "name": "quota_orbits",
                     "title": "Quota Orbits",
-                    "version": "0.1.0"
+                    "version": "0.1.0",
                 ]
             ],
             deadline: deadline

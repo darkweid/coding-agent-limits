@@ -126,7 +126,7 @@ private enum DashboardPreviewFixtures {
 
     static let accounts = [
         account(id: "one", alias: "max", active: false, fiveHour: 100, weekly: 81),
-        account(id: "two", alias: "pro", active: true, fiveHour: 28, weekly: 93)
+        account(id: "two", alias: "pro", active: true, fiveHour: 28, weekly: 93),
     ]
 
     static let quota = CodexQuota(
@@ -141,7 +141,8 @@ private enum DashboardPreviewFixtures {
     )
 
     static let stale = QuotaSnapshot(
-        claude: .stale(accounts, lastSuccessAt: now.addingTimeInterval(-480), message: "unavailable"),
+        claude: .stale(
+            accounts, lastSuccessAt: now.addingTimeInterval(-480), message: "unavailable"),
         codex: .stale(quota, lastSuccessAt: now.addingTimeInterval(-180), message: "unavailable"),
         lastCycleStartedAt: now
     )
@@ -158,7 +159,7 @@ private enum DashboardPreviewFixtures {
         claude: .available(
             [
                 account(id: "one", alias: "19", active: true, fiveHour: 19, weekly: 0),
-                account(id: "two", alias: "20", active: false, fiveHour: 51, weekly: 20)
+                account(id: "two", alias: "20", active: false, fiveHour: 51, weekly: 20),
             ],
             updatedAt: now
         ),
@@ -176,7 +177,7 @@ private enum DashboardPreviewFixtures {
         claude: .available(
             [
                 account(id: "one", alias: "", active: true, fiveHour: 100, weekly: 81),
-                account(id: "two", alias: "   ", active: false, fiveHour: 28, weekly: 93)
+                account(id: "two", alias: "   ", active: false, fiveHour: 28, weekly: 93),
             ],
             updatedAt: now
         ),
@@ -187,8 +188,10 @@ private enum DashboardPreviewFixtures {
     static let longAlias = QuotaSnapshot(
         claude: .available(
             [
-                account(id: "one", alias: "unusually-long-neutral-name", active: true, fiveHour: 100, weekly: 81),
-                account(id: "two", alias: "02", active: false, fiveHour: 28, weekly: 93)
+                account(
+                    id: "one", alias: "unusually-long-neutral-name", active: true, fiveHour: 100,
+                    weekly: 81),
+                account(id: "two", alias: "02", active: false, fiveHour: 28, weekly: 93),
             ],
             updatedAt: now
         ),

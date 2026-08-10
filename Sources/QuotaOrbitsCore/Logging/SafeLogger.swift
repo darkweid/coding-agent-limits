@@ -14,8 +14,11 @@ public enum FailureCategory: String, Sendable {
 }
 
 public enum SafeLogger {
+    @_spi(Testing)
+    public static let subsystem = "io.github.darkweid.coding-agent-limits"
+
     private static let logger = Logger(
-        subsystem: "io.github.darkweid.coding-agent-limits",
+        subsystem: subsystem,
         category: "quota-refresh"
     )
 
