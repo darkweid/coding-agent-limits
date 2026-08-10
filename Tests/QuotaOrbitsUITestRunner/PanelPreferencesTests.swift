@@ -15,7 +15,7 @@ enum PanelPreferencesTests {
             let home = URL(fileURLWithPath: "/Users/example", isDirectory: true)
             let executablePaths = Set([
                 "/opt/homebrew/bin/codex",
-                "/usr/local/bin/codex"
+                "/usr/local/bin/codex",
             ])
 
             let result = ExecutablePathResolver.defaultCodexPath(
@@ -76,7 +76,7 @@ enum PanelPreferencesTests {
                     persistedKeys,
                     Set([
                         "quotaOrbits.cswapPath",
-                        "quotaOrbits.codexPath"
+                        "quotaOrbits.codexPath",
                     ])
                 )
             }
@@ -100,7 +100,7 @@ enum PanelPreferencesTests {
                         "quotaOrbits.codexPath",
                         "quotaOrbits.panelOrigin.x",
                         "quotaOrbits.panelOrigin.y",
-                        "quotaOrbits.isPinned"
+                        "quotaOrbits.isPinned",
                     ])
                 )
             }
@@ -120,7 +120,7 @@ enum PanelPreferencesTests {
                 panelSize: CGSize(width: 350, height: 350),
                 screenFrames: [
                     CGRect(x: 0, y: 0, width: 1_440, height: 900),
-                    CGRect(x: 1_920, y: 0, width: 1_080, height: 1_920)
+                    CGRect(x: 1_920, y: 0, width: 1_080, height: 1_920),
                 ]
             )
 
@@ -138,7 +138,7 @@ enum PanelPreferencesTests {
             try TestSupport.assertEqual(pinned.rawValue, -19)
             try TestSupport.assertTrue(pinned.rawValue > desktopIcons)
             try TestSupport.assertTrue(pinned.rawValue < normalWindows)
-        }
+        },
     ]
 
     @MainActor

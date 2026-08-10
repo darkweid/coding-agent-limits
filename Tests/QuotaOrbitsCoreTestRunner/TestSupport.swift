@@ -52,11 +52,13 @@ enum TestSupport {
     static func fixtureData(
         _ name: String
     ) throws -> Data {
-        guard let url = Bundle.module.url(
-            forResource: name,
-            withExtension: nil,
-            subdirectory: "Fixtures"
-        ) else {
+        guard
+            let url = Bundle.module.url(
+                forResource: name,
+                withExtension: nil,
+                subdirectory: "Fixtures"
+            )
+        else {
             throw AssertionFailure(message: "missing fixture \(name)")
         }
         return try Data(contentsOf: url)

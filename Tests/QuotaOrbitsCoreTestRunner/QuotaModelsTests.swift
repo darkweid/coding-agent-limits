@@ -43,6 +43,6 @@ enum QuotaModelsTests {
                 .critical
             )
             try TestSupport.assertEqual(QuotaLevel.classify(usedPercent: 100), .critical)
-        }
+        },
     ]
 }

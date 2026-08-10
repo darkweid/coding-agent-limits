@@ -47,13 +47,16 @@ public final class PanelPreferences: ObservableObject {
 
     public init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        cswapPath = defaults.string(forKey: Keys.cswapPath)
+        cswapPath =
+            defaults.string(forKey: Keys.cswapPath)
             ?? Self.defaultCswapPath
-        codexPath = defaults.string(forKey: Keys.codexPath)
+        codexPath =
+            defaults.string(forKey: Keys.codexPath)
             ?? Self.defaultCodexPath
 
         if defaults.object(forKey: Keys.panelOriginX) != nil,
-           defaults.object(forKey: Keys.panelOriginY) != nil {
+            defaults.object(forKey: Keys.panelOriginY) != nil
+        {
             panelOrigin = CGPoint(
                 x: defaults.double(forKey: Keys.panelOriginX),
                 y: defaults.double(forKey: Keys.panelOriginY)
@@ -83,10 +86,11 @@ public enum PanelPlacement {
         guard !screens.isEmpty else { return origin }
 
         let proposed = CGRect(origin: origin, size: panelSize)
-        let target = screens.max { lhs, rhs in
-            suitability(of: lhs, for: proposed)
-                < suitability(of: rhs, for: proposed)
-        } ?? screens[0]
+        let target =
+            screens.max { lhs, rhs in
+                suitability(of: lhs, for: proposed)
+                    < suitability(of: rhs, for: proposed)
+            } ?? screens[0]
 
         let maximumX = max(target.minX, target.maxX - panelSize.width)
         let maximumY = max(target.minY, target.maxY - panelSize.height)

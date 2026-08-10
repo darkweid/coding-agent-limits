@@ -95,7 +95,7 @@ enum ClaudeQuotaSourceTests {
             ) { error in
                 try TestSupport.assertEqual(error as? CommandRunnerError, .timedOut)
             }
-        }
+        },
     ]
 
     private static func fixtureWithFirstAliasRemoved() throws -> Data {
@@ -110,31 +110,32 @@ enum ClaudeQuotaSourceTests {
 
     private static func sourceReturningOneAccount() -> ClaudeQuotaSource {
         let result = CommandResult(
-            stdout: Data("""
-            {
-              "schemaVersion": 1,
-              "activeAccountNumber": 1,
-              "accounts": [
+            stdout: Data(
+                """
                 {
-                  "number": 1,
-                  "email": "hidden@example.invalid",
-                  "active": true,
-                  "usageStatus": "ok",
-                  "usage": {
-                    "fiveHour": {
-                      "pct": 0.0,
-                      "resetsAt": "2026-08-07T12:30:00+00:00"
-                    },
-                    "sevenDay": {
-                      "pct": 19.0,
-                      "resetsAt": "2026-08-12T07:00:00.162148+00:00"
+                  "schemaVersion": 1,
+                  "activeAccountNumber": 1,
+                  "accounts": [
+                    {
+                      "number": 1,
+                      "email": "hidden@example.invalid",
+                      "active": true,
+                      "usageStatus": "ok",
+                      "usage": {
+                        "fiveHour": {
+                          "pct": 0.0,
+                          "resetsAt": "2026-08-07T12:30:00+00:00"
+                        },
+                        "sevenDay": {
+                          "pct": 19.0,
+                          "resetsAt": "2026-08-12T07:00:00.162148+00:00"
+                        }
+                      },
+                      "alias": "max"
                     }
-                  },
-                  "alias": "max"
+                  ]
                 }
-              ]
-            }
-            """.utf8),
+                """.utf8),
             stderr: Data(),
             exitCode: 0
         )
@@ -146,47 +147,48 @@ enum ClaudeQuotaSourceTests {
 
     private static func sourceReturningThreeAccounts() -> ClaudeQuotaSource {
         let result = CommandResult(
-            stdout: Data("""
-            {
-              "schemaVersion": 1,
-              "activeAccountNumber": 2,
-              "accounts": [
+            stdout: Data(
+                """
                 {
-                  "number": 1,
-                  "email": "hidden@example.invalid",
-                  "active": false,
-                  "usageStatus": "ok",
-                  "usage": {
-                    "fiveHour": { "pct": 8.0, "resetsAt": "2026-08-07T12:30:00.162124+00:00" },
-                    "sevenDay": { "pct": 57.0, "resetsAt": "2026-08-12T07:00:00.162148+00:00" }
-                  },
-                  "alias": "max"
-                },
-                {
-                  "number": 2,
-                  "email": "hidden2@example.invalid",
-                  "active": true,
-                  "usageStatus": "ok",
-                  "usage": {
-                    "fiveHour": { "pct": 100.0, "resetsAt": "2026-08-07T11:50:00.774549+00:00" },
-                    "sevenDay": { "pct": 73.0, "resetsAt": "2026-08-09T22:00:00.774573+00:00" }
-                  },
-                  "alias": "pro"
-                },
-                {
-                  "number": 3,
-                  "email": "hidden3@example.invalid",
-                  "active": false,
-                  "usageStatus": "ok",
-                  "usage": {
-                    "fiveHour": { "pct": 4.0, "resetsAt": "2026-08-07T13:00:00.000000+00:00" },
-                    "sevenDay": { "pct": 10.0, "resetsAt": "2026-08-13T07:00:00.000000+00:00" }
-                  },
-                  "alias": "lab"
+                  "schemaVersion": 1,
+                  "activeAccountNumber": 2,
+                  "accounts": [
+                    {
+                      "number": 1,
+                      "email": "hidden@example.invalid",
+                      "active": false,
+                      "usageStatus": "ok",
+                      "usage": {
+                        "fiveHour": { "pct": 8.0, "resetsAt": "2026-08-07T12:30:00.162124+00:00" },
+                        "sevenDay": { "pct": 57.0, "resetsAt": "2026-08-12T07:00:00.162148+00:00" }
+                      },
+                      "alias": "max"
+                    },
+                    {
+                      "number": 2,
+                      "email": "hidden2@example.invalid",
+                      "active": true,
+                      "usageStatus": "ok",
+                      "usage": {
+                        "fiveHour": { "pct": 100.0, "resetsAt": "2026-08-07T11:50:00.774549+00:00" },
+                        "sevenDay": { "pct": 73.0, "resetsAt": "2026-08-09T22:00:00.774573+00:00" }
+                      },
+                      "alias": "pro"
+                    },
+                    {
+                      "number": 3,
+                      "email": "hidden3@example.invalid",
+                      "active": false,
+                      "usageStatus": "ok",
+                      "usage": {
+                        "fiveHour": { "pct": 4.0, "resetsAt": "2026-08-07T13:00:00.000000+00:00" },
+                        "sevenDay": { "pct": 10.0, "resetsAt": "2026-08-13T07:00:00.000000+00:00" }
+                      },
+                      "alias": "lab"
+                    }
+                  ]
                 }
-              ]
-            }
-            """.utf8),
+                """.utf8),
             stderr: Data(),
             exitCode: 0
         )

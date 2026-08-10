@@ -12,7 +12,8 @@ if arguments.isEmpty {
     exit(2)
 }
 
-let allCases = QuotaPaletteTests.cases
+let allCases =
+    QuotaPaletteTests.cases
     + QuotaPresentationTests.cases
     + PanelPreferencesTests.cases
     + SettingsWindowControllerTests.cases

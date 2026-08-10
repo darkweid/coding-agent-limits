@@ -67,31 +67,33 @@ public struct ProcessCommandRunner: CommandRunning {
             throw CommandRunnerError.launchFailed
         }
 
-        return try await withTaskCancellationHandler(operation: {
-            try await withThrowingTaskGroup(of: CommandResult.self) { group in
-                group.addTask {
-                    await termination.wait()
-                }
-                group.addTask {
-                    try await Task.sleep(for: timeout)
-                    throw CommandRunnerError.timedOut
-                }
-
-                do {
-                    guard let firstResult = try await group.next() else {
-                        throw CommandRunnerError.launchFailed
+        return try await withTaskCancellationHandler(
+            operation: {
+                try await withThrowingTaskGroup(of: CommandResult.self) { group in
+                    group.addTask {
+                        await termination.wait()
                     }
-                    group.cancelAll()
-                    return firstResult
-                } catch {
-                    group.cancelAll()
-                    terminateIfRunning(process)
-                    throw error
+                    group.addTask {
+                        try await Task.sleep(for: timeout)
+                        throw CommandRunnerError.timedOut
+                    }
+
+                    do {
+                        guard let firstResult = try await group.next() else {
+                            throw CommandRunnerError.launchFailed
+                        }
+                        group.cancelAll()
+                        return firstResult
+                    } catch {
+                        group.cancelAll()
+                        terminateIfRunning(process)
+                        throw error
+                    }
                 }
-            }
-        }, onCancel: {
-            terminateIfRunning(process)
-        })
+            },
+            onCancel: {
+                terminateIfRunning(process)
+            })
     }
 }
 

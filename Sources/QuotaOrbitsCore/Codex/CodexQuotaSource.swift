@@ -28,7 +28,8 @@ public actor CodexQuotaSource: CodexQuotaFetching {
             throw CodexQuotaError.invalidResponse
         }
 
-        let bucket = response.result.rateLimitsByLimitId?["codex"]
+        let bucket =
+            response.result.rateLimitsByLimitId?["codex"]
             ?? response.result.rateLimits
         guard let primary = bucket?.primary else {
             throw CodexQuotaError.missingPrimaryWindow

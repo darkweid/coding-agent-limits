@@ -16,7 +16,9 @@ enum CodexAppServerClientTests {
             }
             try TestSupport.assertEqual(received, expected)
         },
-        TestCase(name: "CodexAppServerClientTests.testProcessTransportRetainsFinalLineAfterChildExit") {
+        TestCase(
+            name: "CodexAppServerClientTests.testProcessTransportRetainsFinalLineAfterChildExit"
+        ) {
             let expected = Data(#"{"id":1,"result":{}}"#.utf8)
             let transport = ProcessJSONLineTransport(
                 executable: URL(fileURLWithPath: "/usr/bin/printf"),
@@ -30,11 +32,12 @@ enum CodexAppServerClientTests {
 
             try TestSupport.assertEqual(received, expected)
         },
-        TestCase(name: "CodexAppServerClientTests.testInitializesOnceThenReadsRateLimitsRepeatedly") {
+        TestCase(name: "CodexAppServerClientTests.testInitializesOnceThenReadsRateLimitsRepeatedly")
+        {
             let transport = ScriptedJSONLineTransport(responses: [
                 rpcLine(id: 1, result: #"{"userAgent":"test"}"#),
                 rpcLine(id: 2, result: #"{"rateLimits":{}}"#),
-                rpcLine(id: 3, result: #"{"rateLimits":{}}"#)
+                rpcLine(id: 3, result: #"{"rateLimits":{}}"#),
             ])
             let client = CodexAppServerClient(transport: transport)
 
@@ -75,7 +78,7 @@ enum CodexAppServerClientTests {
                 .line(rpcLine(id: 1, result: #"{"userAgent":"test"}"#)),
                 .closed,
                 .line(rpcLine(id: 3, result: #"{"userAgent":"test"}"#)),
-                .line(rpcLine(id: 4, result: #"{"rateLimits":{}}"#))
+                .line(rpcLine(id: 4, result: #"{"rateLimits":{}}"#)),
             ])
             let client = CodexAppServerClient(transport: transport)
 
@@ -98,10 +101,10 @@ enum CodexAppServerClientTests {
                 methods,
                 [
                     "initialize", "initialized", "account/rateLimits/read",
-                    "initialize", "initialized", "account/rateLimits/read"
+                    "initialize", "initialized", "account/rateLimits/read",
                 ]
             )
-        }
+        },
     ]
 
     private static func rpcLine(id: Int, result: String) -> Data {

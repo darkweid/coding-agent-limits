@@ -17,7 +17,7 @@ public enum ExecutablePathResolver {
         let candidates = [
             userLocalPath,
             "/opt/homebrew/bin/codex",
-            "/usr/local/bin/codex"
+            "/usr/local/bin/codex",
         ]
         return candidates.first(where: isExecutable) ?? userLocalPath
     }

@@ -33,9 +33,10 @@ public struct ClaudeQuotaSource: ClaudeQuotaFetching {
         }
 
         return payload.accounts.map { account in
-            let alias = account.alias.flatMap { value in
-                value.isEmpty ? nil : value
-            } ?? String(format: "%02d", account.number)
+            let alias =
+                account.alias.flatMap { value in
+                    value.isEmpty ? nil : value
+                } ?? String(format: "%02d", account.number)
             return ClaudeAccountQuota(
                 id: String(account.number),
                 alias: alias,

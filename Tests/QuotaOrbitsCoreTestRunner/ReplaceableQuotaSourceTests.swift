@@ -3,15 +3,21 @@ import Foundation
 
 enum ReplaceableQuotaSourceTests {
     static let cases: [TestCase] = [
-        TestCase(name: "ReplaceableQuotaSourceTests.testOutOfOrderCodexReplacementKeepsNewestTransportActive") {
+        TestCase(
+            name:
+                "ReplaceableQuotaSourceTests.testOutOfOrderCodexReplacementKeepsNewestTransportActive"
+        ) {
             try await testOutOfOrderCodexReplacementKeepsNewestTransportActive()
         },
         TestCase(name: "QuotaRefreshCoordinatorTests.testIdleWaiterResumesAfterActiveCycle") {
             try await testIdleWaiterResumesAfterActiveCycle()
         },
-        TestCase(name: "QuotaRefreshCoordinatorTests.testCancelledIdleWaiterIsRemovedBeforeCycleCompletes") {
+        TestCase(
+            name:
+                "QuotaRefreshCoordinatorTests.testCancelledIdleWaiterIsRemovedBeforeCycleCompletes"
+        ) {
             try await testCancelledIdleWaiterIsRemovedBeforeCycleCompletes()
-        }
+        },
     ]
 
     private static func testOutOfOrderCodexReplacementKeepsNewestTransportActive() async throws {
@@ -143,7 +149,7 @@ enum ReplaceableQuotaSourceTests {
             isActive: false,
             fiveHour: QuotaWindow(usedPercent: 40, resetsAt: reset),
             weekly: QuotaWindow(usedPercent: 50, resetsAt: reset)
-        )
+        ),
     ]
     private static let codexQuota = CodexQuota(
         weekly: QuotaWindow(usedPercent: 35, resetsAt: reset),

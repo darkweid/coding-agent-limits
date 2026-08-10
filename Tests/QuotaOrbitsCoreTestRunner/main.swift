@@ -15,7 +15,8 @@ if arguments == ["--emit-large-payload"] {
     exit(2)
 }
 
-let allCases = QuotaModelsTests.cases
+let allCases =
+    QuotaModelsTests.cases
     + QuotaFormattingTests.cases
     + ClaudeQuotaSourceTests.cases
     + CodexAppServerClientTests.cases
