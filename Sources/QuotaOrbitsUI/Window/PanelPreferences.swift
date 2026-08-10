@@ -106,7 +106,7 @@ public enum PanelPlacement {
     ) -> Double {
         let intersection = screen.intersection(panel)
         if !intersection.isNull, !intersection.isEmpty {
-            return 1_000_000_000 + intersection.width * intersection.height
+            return 1_000_000_000 + Double(intersection.width * intersection.height)
         }
 
         let deltaX: Double
