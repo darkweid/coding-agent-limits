@@ -3,7 +3,6 @@ import Foundation
 public enum ClaudeQuotaError: Error, Equatable, Sendable {
     case commandFailed(exitCode: Int32)
     case invalidResponse
-    case expectedTwoAccounts(actual: Int)
 }
 
 public struct ClaudeQuotaSource: ClaudeQuotaFetching {
@@ -29,16 +28,17 @@ public struct ClaudeQuotaSource: ClaudeQuotaFetching {
         }
 
         let payload = try ClaudePayload.decode(result.stdout)
-        guard payload.accounts.count >= 2 else {
-            throw ClaudeQuotaError.expectedTwoAccounts(actual: payload.accounts.count)
+        guard !payload.accounts.isEmpty else {
+            throw ClaudeQuotaError.invalidResponse
         }
 
-        return payload.accounts.prefix(2).map { account in
-            ClaudeAccountQuota(
+        return payload.accounts.map { account in
+            let alias = account.alias.flatMap { value in
+                value.isEmpty ? nil : value
+            } ?? String(format: "%02d", account.number)
+            return ClaudeAccountQuota(
                 id: String(account.number),
-                alias: account.alias?.isEmpty == false
-                    ? account.alias!
-                    : String(format: "%02d", account.number),
+                alias: alias,
                 isActive: account.active,
                 fiveHour: QuotaWindow(
                     usedPercent: account.usage.fiveHour.pct,
@@ -61,7 +61,7 @@ private struct ClaudePayload: Decodable {
         decoder.dateDecodingStrategy = .custom { decoder in
             let container = try decoder.singleValueContainer()
             let value = try container.decode(String.self)
-            guard let date = ISO8601DateFormatter.quotaDate.date(from: value) else {
+            guard let date = parseReset(value) else {
                 throw DecodingError.dataCorruptedError(
                     in: container,
                     debugDescription: "Expected ISO-8601 date"
@@ -75,6 +75,15 @@ private struct ClaudePayload: Decodable {
         } catch {
             throw ClaudeQuotaError.invalidResponse
         }
+    }
+
+    private static func parseReset(_ value: String) -> Date? {
+        let fractional = Date.ISO8601FormatStyle(includingFractionalSeconds: true)
+        let wholeSeconds = Date.ISO8601FormatStyle(includingFractionalSeconds: false)
+        if let date = try? fractional.parse(value) {
+            return date
+        }
+        return try? wholeSeconds.parse(value)
     }
 }
 
@@ -93,12 +102,4 @@ private struct ClaudeUsage: Decodable {
 private struct ClaudeUsageWindow: Decodable {
     let pct: Double
     let resetsAt: Date
-}
-
-private extension ISO8601DateFormatter {
-    static let quotaDate: ISO8601DateFormatter = {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return formatter
-    }()
 }
