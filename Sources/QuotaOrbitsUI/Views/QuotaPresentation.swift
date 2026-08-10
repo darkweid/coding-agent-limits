@@ -3,14 +3,14 @@ import QuotaOrbitsCore
 
 @_spi(Testing)
 public enum QuotaCopy {
-    public static func number(_ remainingPercent: Double?) -> String {
-        guard let remainingPercent else { return "—" }
-        return String(Int(remainingPercent.rounded()))
+    public static func number(_ usedPercent: Double?) -> String {
+        guard let usedPercent else { return "—" }
+        return String(Int(usedPercent.rounded()))
     }
 
-    public static func percent(_ remainingPercent: Double?) -> String {
-        guard remainingPercent != nil else { return "—" }
-        return "\(number(remainingPercent))%"
+    public static func percent(_ usedPercent: Double?) -> String {
+        guard usedPercent != nil else { return "—" }
+        return "\(number(usedPercent))%"
     }
 
     public static func resetCountdown(window: QuotaWindow?, now: Date) -> String {
