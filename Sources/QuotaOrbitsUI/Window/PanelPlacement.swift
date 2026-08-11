@@ -2,6 +2,15 @@ import Foundation
 
 @_spi(Testing)
 public enum PanelPlacement {
+    public static func preferredOrigin(
+        afterWindowMovedTo movedOrigin: CGPoint,
+        previousOrigin: CGPoint,
+        isPinned: Bool
+    ) -> CGPoint {
+        guard !isPinned else { return previousOrigin }
+        return movedOrigin
+    }
+
     public static func clampedOrigin(
         _ origin: CGPoint,
         panelSize: CGSize,

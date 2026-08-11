@@ -160,6 +160,28 @@ enum PanelPreferencesTests {
 
             try TestSupport.assertEqual(result, CGPoint(x: 1_920, y: 700))
         },
+        TestCase(name: "PanelPreferencesTests.testPinnedSystemMoveKeepsPreferredOrigin") {
+            let preferredOrigin = CGPoint(x: 2_240, y: 420)
+
+            let result = PanelPlacement.preferredOrigin(
+                afterWindowMovedTo: CGPoint(x: 1_546, y: 675),
+                previousOrigin: preferredOrigin,
+                isPinned: true
+            )
+
+            try TestSupport.assertEqual(result, preferredOrigin)
+        },
+        TestCase(name: "PanelPreferencesTests.testMovableWindowMoveUpdatesPreferredOrigin") {
+            let movedOrigin = CGPoint(x: 420, y: 240)
+
+            let result = PanelPlacement.preferredOrigin(
+                afterWindowMovedTo: movedOrigin,
+                previousOrigin: CGPoint(x: 2_240, y: 420),
+                isPinned: false
+            )
+
+            try TestSupport.assertEqual(result, movedOrigin)
+        },
         TestCase(name: "PanelWindowLevelTests.testPinnedPanelSitsAboveDesktopIconsAndBelowApps") {
             let desktopIcons = -20
             let normalWindows = 0

@@ -54,6 +54,8 @@ public final class DesktopPanelController: NSObject, NSWindowDelegate {
     private let actions: DashboardActions
     private let panel: NSPanel
     private var screenObservation: ScreenObservation?
+    private var preferredOrigin: CGPoint
+    private var isApplyingPlacement = false
 
     public init(
         coordinator: QuotaFeedRefreshCoordinator,
@@ -73,8 +75,9 @@ public final class DesktopPanelController: NSObject, NSWindowDelegate {
             x: fallbackFrame.maxX - size.width - 24,
             y: fallbackFrame.maxY - size.height - 24
         )
+        let preferredOrigin = preferences.panelOrigin ?? fallbackOrigin
         let origin = PanelPlacement.clampedOrigin(
-            preferences.panelOrigin ?? fallbackOrigin,
+            preferredOrigin,
             panelSize: size,
             screenFrames: screens
         )
@@ -86,6 +89,7 @@ public final class DesktopPanelController: NSObject, NSWindowDelegate {
             defer: false
         )
         self.panel = panel
+        self.preferredOrigin = preferredOrigin
         super.init()
 
         panel.delegate = self
@@ -110,7 +114,7 @@ public final class DesktopPanelController: NSObject, NSWindowDelegate {
         )
 
         applyPinnedState(preferences.isPinned, persistOrigin: false)
-        preferences.panelOrigin = origin
+        preferences.panelOrigin = preferredOrigin
 
         let center = NotificationCenter.default
         let token = center.addObserver(
@@ -135,7 +139,7 @@ public final class DesktopPanelController: NSObject, NSWindowDelegate {
     }
 
     public func persistOrigin() {
-        preferences.panelOrigin = panel.frame.origin
+        preferences.panelOrigin = preferredOrigin
     }
 
     public func close() {
@@ -147,7 +151,18 @@ public final class DesktopPanelController: NSObject, NSWindowDelegate {
     }
 
     public func windowDidMove(_ notification: Notification) {
-        persistOrigin()
+        guard !isApplyingPlacement else { return }
+        let updatedOrigin = PanelPlacement.preferredOrigin(
+            afterWindowMovedTo: panel.frame.origin,
+            previousOrigin: preferredOrigin,
+            isPinned: preferences.isPinned
+        )
+        if updatedOrigin != preferredOrigin {
+            preferredOrigin = updatedOrigin
+            persistOrigin()
+        } else {
+            clampToCurrentScreens()
+        }
     }
 
     private func applyPinnedState(
@@ -155,7 +170,10 @@ public final class DesktopPanelController: NSObject, NSWindowDelegate {
         persistOrigin: Bool
     ) {
         if persistOrigin {
-            preferences.panelOrigin = panel.frame.origin
+            if !preferences.isPinned {
+                preferredOrigin = panel.frame.origin
+            }
+            self.persistOrigin()
         }
         preferences.isPinned = isPinned
         actions.isPinned = isPinned
@@ -165,13 +183,14 @@ public final class DesktopPanelController: NSObject, NSWindowDelegate {
 
     private func clampToCurrentScreens() {
         let origin = PanelPlacement.clampedOrigin(
-            panel.frame.origin,
+            preferredOrigin,
             panelSize: panel.frame.size,
             screenFrames: NSScreen.screens.map(\.visibleFrame)
         )
         if origin != panel.frame.origin {
+            isApplyingPlacement = true
+            defer { isApplyingPlacement = false }
             panel.setFrameOrigin(origin)
         }
-        preferences.panelOrigin = origin
     }
 }
