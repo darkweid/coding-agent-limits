@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import QuotaOrbitsCore
 @_spi(Testing) import QuotaOrbitsUI
 
 enum PanelPreferencesTests {
@@ -126,6 +127,56 @@ enum PanelPreferencesTests {
 
             try TestSupport.assertEqual(result, CGPoint(x: 1_920, y: 700))
         },
+        TestCase(name: "PanelPreferencesTests.testShowRecoversFromDeferredSystemRelocation") {
+            try await withAsyncPreferences { preferences, _ in
+                let screens = NSScreen.screens.map(\.visibleFrame)
+                guard
+                    let screen = screens.first,
+                    let maxScreenX = screens.map(\.maxX).max()
+                else {
+                    throw AssertionFailure(message: "Expected at least one screen")
+                }
+                let injectedFrame = CGRect(
+                    x: maxScreenX + DesktopPanelController.panelSize.width,
+                    y: screen.midY,
+                    width: DesktopPanelController.panelSize.width,
+                    height: DesktopPanelController.panelSize.height
+                )
+                try TestSupport.assertFalse(
+                    screens.contains(where: { $0.contains(injectedFrame) })
+                )
+                let controller = DesktopPanelController(
+                    coordinator: QuotaRefreshCoordinator(
+                        claude: UnusedClaudeQuotaSource(),
+                        codex: UnusedCodexQuotaSource()
+                    ),
+                    actions: DashboardActions(
+                        isPinned: true,
+                        refreshNow: {},
+                        togglePinned: {},
+                        openSettings: {},
+                        quit: {}
+                    ),
+                    preferences: preferences
+                )
+                defer { controller.close() }
+
+                DispatchQueue.main.async {
+                    controller.setPanelFrameForTesting(injectedFrame)
+                }
+                controller.show()
+                await waitForMainQueue()
+
+                let finalFrame = controller.panelFrameForTesting
+                try TestSupport.assertTrue(
+                    screens.contains(where: { $0.contains(finalFrame) })
+                )
+                try TestSupport.assertEqual(
+                    preferences.panelOrigin,
+                    finalFrame.origin
+                )
+            }
+        },
         TestCase(name: "PanelWindowLevelTests.testPinnedPanelSitsAboveDesktopIconsAndBelowApps") {
             let desktopIcons = -20
             let normalWindows = 0
@@ -153,4 +204,40 @@ enum PanelPreferencesTests {
         defer { defaults.removePersistentDomain(forName: suiteName) }
         try body(PanelPreferences(defaults: defaults), defaults)
     }
+
+    @MainActor
+    private static func withAsyncPreferences(
+        _ body: @MainActor (PanelPreferences, UserDefaults) async throws -> Void
+    ) async throws {
+        let suiteName = "QuotaOrbitsUITests.\(UUID().uuidString)"
+        guard let defaults = UserDefaults(suiteName: suiteName) else {
+            throw AssertionFailure(message: "Could not create isolated UserDefaults")
+        }
+        defaults.removePersistentDomain(forName: suiteName)
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        try await body(PanelPreferences(defaults: defaults), defaults)
+    }
+
+    @MainActor
+    private static func waitForMainQueue() async {
+        await withCheckedContinuation { continuation in
+            DispatchQueue.main.async {
+                continuation.resume()
+            }
+        }
+    }
 }
+
+private struct UnusedClaudeQuotaSource: ClaudeQuotaFetching {
+    func fetch() async throws -> [ClaudeAccountQuota] {
+        throw UnusedQuotaSourceError()
+    }
+}
+
+private struct UnusedCodexQuotaSource: CodexQuotaFetching {
+    func fetch() async throws -> CodexQuota {
+        throw UnusedQuotaSourceError()
+    }
+}
+
+private struct UnusedQuotaSourceError: Error {}

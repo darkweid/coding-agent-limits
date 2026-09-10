@@ -33,6 +33,16 @@ struct CodexQuotaCard: View {
             }
 
             QuotaBarView(
+                window: "5 hours",
+                countdown: quota.status.resetCountdown(
+                    window: quota.fiveHour,
+                    now: now
+                ),
+                usedPercent: quota.fiveHour?.usedPercent,
+                dataState: quota.status.barDataState
+            )
+
+            QuotaBarView(
                 window: "7 days",
                 countdown: quota.status.resetCountdown(
                     window: quota.weekly,

@@ -50,10 +50,16 @@ public struct ClaudeAccountQuota: Equatable, Sendable {
 }
 
 public struct CodexQuota: Equatable, Sendable {
+    public let fiveHour: QuotaWindow?
     public let weekly: QuotaWindow
     public let creditsBalance: Decimal?
 
-    public init(weekly: QuotaWindow, creditsBalance: Decimal?) {
+    public init(
+        fiveHour: QuotaWindow? = nil,
+        weekly: QuotaWindow,
+        creditsBalance: Decimal?
+    ) {
+        self.fiveHour = fiveHour
         self.weekly = weekly
         self.creditsBalance = creditsBalance
     }

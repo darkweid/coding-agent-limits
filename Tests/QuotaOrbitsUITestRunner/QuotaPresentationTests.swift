@@ -84,6 +84,7 @@ enum QuotaPresentationTests {
                 presentation.accounts.map(\.fiveHour?.remainingPercent), [100, 28])
             try TestSupport.assertEqual(
                 presentation.accounts.map(\.weekly?.remainingPercent), [81, 93])
+            try TestSupport.assertEqual(presentation.codex.fiveHour?.remainingPercent, 25)
             try TestSupport.assertEqual(presentation.codex.weekly?.remainingPercent, 50)
             try TestSupport.assertEqual(presentation.lastSuccessfulRefreshAt, now)
         },
@@ -123,6 +124,7 @@ enum QuotaPresentationTests {
                 presentation.accounts[0].status.resetCountdown(window: nil, now: now),
                 "—"
             )
+            try TestSupport.assertEqual(presentation.codex.fiveHour, nil)
             try TestSupport.assertEqual(presentation.codex.weekly, nil)
             try TestSupport.assertEqual(
                 presentation.codex.status.resetCountdown(window: nil, now: now),
@@ -202,6 +204,7 @@ enum QuotaPresentationTests {
 
     private static func codex(remaining: Double) -> CodexQuota {
         CodexQuota(
+            fiveHour: window(remaining: 25),
             weekly: window(remaining: remaining),
             creditsBalance: Decimal(string: "411.5127706250")
         )

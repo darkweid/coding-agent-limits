@@ -3,15 +3,20 @@ import QuotaOrbitsCore
 
 enum CodexQuotaSourceTests {
     static let cases: [TestCase] = [
-        TestCase(name: "CodexQuotaSourceTests.testFetchPrefersNamedCodexBucket") {
+        TestCase(name: "CodexQuotaSourceTests.testFetchMapsNamedFiveHourAndWeeklyWindows") {
             let response = Data(
-                #"{"id":2,"result":{"rateLimits":{"primary":{"usedPercent":90,"windowDurationMins":300,"resetsAt":100}},"rateLimitsByLimitId":{"codex":{"primary":{"usedPercent":25,"windowDurationMins":10080,"resetsAt":200}}}}}"#
+                #"{"id":2,"result":{"rateLimits":{"primary":{"usedPercent":90,"windowDurationMins":300,"resetsAt":100}},"rateLimitsByLimitId":{"codex":{"primary":{"usedPercent":60,"windowDurationMins":10080,"resetsAt":300},"secondary":{"usedPercent":25,"windowDurationMins":300,"resetsAt":200}}}}}"#
                     .utf8)
 
             let quota = try await source(response: response).fetch()
 
-            try TestSupport.assertEqual(quota.weekly.remainingPercent, 75)
-            try TestSupport.assertEqual(quota.weekly.resetsAt, Date(timeIntervalSince1970: 200))
+            try TestSupport.assertEqual(quota.fiveHour?.remainingPercent, 75)
+            try TestSupport.assertEqual(
+                quota.fiveHour?.resetsAt,
+                Date(timeIntervalSince1970: 200)
+            )
+            try TestSupport.assertEqual(quota.weekly.remainingPercent, 40)
+            try TestSupport.assertEqual(quota.weekly.resetsAt, Date(timeIntervalSince1970: 300))
         },
         TestCase(name: "CodexQuotaSourceTests.testFetchFallsBackToLegacyRateLimits") {
             let response = Data(
@@ -20,6 +25,18 @@ enum CodexQuotaSourceTests {
 
             let quota = try await source(response: response).fetch()
 
+            try TestSupport.assertEqual(quota.fiveHour, nil)
+            try TestSupport.assertEqual(quota.weekly.remainingPercent, 60)
+            try TestSupport.assertEqual(quota.weekly.resetsAt, Date(timeIntervalSince1970: 300))
+        },
+        TestCase(name: "CodexQuotaSourceTests.testFetchIgnoresIncompleteSecondaryWindow") {
+            let response = Data(
+                #"{"id":2,"result":{"rateLimits":{"primary":{"usedPercent":40,"windowDurationMins":10080,"resetsAt":300},"secondary":{"usedPercent":10}}}}"#
+                    .utf8)
+
+            let quota = try await source(response: response).fetch()
+
+            try TestSupport.assertEqual(quota.fiveHour, nil)
             try TestSupport.assertEqual(quota.weekly.remainingPercent, 60)
             try TestSupport.assertEqual(quota.weekly.resetsAt, Date(timeIntervalSince1970: 300))
         },
@@ -31,6 +48,10 @@ enum CodexQuotaSourceTests {
             try TestSupport.assertEqual(
                 quota.creditsBalance,
                 Decimal(string: "411.5127706250")
+            )
+            try TestSupport.assertEqual(
+                quota.fiveHour?.resetsAt,
+                Date(timeIntervalSince1970: 1_785_741_033)
             )
             try TestSupport.assertEqual(
                 quota.weekly.resetsAt,

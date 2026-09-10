@@ -31,17 +31,28 @@ public actor CodexQuotaSource: CodexQuotaFetching {
         let bucket =
             response.result.rateLimitsByLimitId?["codex"]
             ?? response.result.rateLimits
-        guard let primary = bucket?.primary else {
+        let windows = [bucket?.primary, bucket?.secondary].compactMap { $0 }
+        guard
+            let weekly = windows.first(where: { $0.windowDurationMins == 10_080 }),
+            let weeklyQuota = Self.quotaWindow(weekly)
+        else {
             throw CodexQuotaError.missingPrimaryWindow
         }
+        let fiveHour = windows.first(where: { $0.windowDurationMins == 300 })
         return CodexQuota(
-            weekly: QuotaWindow(
-                usedPercent: primary.usedPercent,
-                resetsAt: Date(timeIntervalSince1970: primary.resetsAt)
-            ),
+            fiveHour: fiveHour.flatMap(Self.quotaWindow),
+            weekly: weeklyQuota,
             creditsBalance: bucket?.credits?.balance.flatMap {
                 Decimal(string: $0, locale: Locale(identifier: "en_US_POSIX"))
             }
+        )
+    }
+
+    private static func quotaWindow(_ window: RateLimitWindow) -> QuotaWindow? {
+        guard let resetsAt = window.resetsAt else { return nil }
+        return QuotaWindow(
+            usedPercent: window.usedPercent,
+            resetsAt: Date(timeIntervalSince1970: resetsAt)
         )
     }
 }
@@ -58,13 +69,14 @@ private struct RateLimitsResult: Decodable {
 
 private struct RateLimitBucket: Decodable {
     let primary: RateLimitWindow?
+    let secondary: RateLimitWindow?
     let credits: Credits?
 }
 
 private struct RateLimitWindow: Decodable {
     let usedPercent: Double
-    let windowDurationMins: Int
-    let resetsAt: TimeInterval
+    let windowDurationMins: Int?
+    let resetsAt: TimeInterval?
 }
 
 private struct Credits: Decodable {

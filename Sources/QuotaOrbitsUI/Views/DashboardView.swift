@@ -70,10 +70,10 @@ struct DashboardContentView: View {
             .frame(height: 216)
 
             CodexQuotaCard(quota: presentation.codex, fixedNow: fixedNow)
-                .frame(height: 82)
+                .frame(height: 104)
         }
         .padding(12)
-        .frame(width: 350, height: 350)
+        .frame(width: 350, height: 372)
         .background(panelBackground)
         .contextMenu {
             let labels = DashboardCopy.contextActions(isPinned: actions.isPinned)
@@ -130,6 +130,7 @@ private enum DashboardPreviewFixtures {
     ]
 
     static let quota = CodexQuota(
+        fiveHour: window(remaining: 75, hours: 2.5),
         weekly: window(remaining: 50, hours: 72),
         creditsBalance: Decimal(string: "411.51")
     )
@@ -165,6 +166,7 @@ private enum DashboardPreviewFixtures {
         ),
         codex: .available(
             CodexQuota(
+                fiveHour: window(remaining: 72, hours: 2.5),
                 weekly: window(remaining: 19, hours: 72),
                 creditsBalance: nil
             ),
@@ -222,7 +224,7 @@ struct DashboardView_Previews: PreviewProvider {
             preview(snapshot: DashboardPreviewFixtures.longAlias)
                 .previewDisplayName("Long Alias")
         }
-        .previewLayout(.fixed(width: 350, height: 350))
+        .previewLayout(.fixed(width: 350, height: 372))
     }
 
     @MainActor

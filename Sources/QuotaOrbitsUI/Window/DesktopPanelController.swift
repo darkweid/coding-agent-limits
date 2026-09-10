@@ -48,7 +48,7 @@ private final class ScreenObservation: @unchecked Sendable {
 
 @MainActor
 public final class DesktopPanelController: NSObject, NSWindowDelegate {
-    public static let panelSize = CGSize(width: 350, height: 350)
+    public static let panelSize = CGSize(width: 350, height: 372)
 
     private let preferences: PanelPreferences
     private let actions: DashboardActions
@@ -125,8 +125,11 @@ public final class DesktopPanelController: NSObject, NSWindowDelegate {
     }
 
     public func show() {
-        clampToCurrentScreens()
         panel.orderFrontRegardless()
+        clampToCurrentScreens()
+        DispatchQueue.main.async { [weak self] in
+            self?.clampToCurrentScreens()
+        }
     }
 
     public func togglePinned() {
@@ -147,6 +150,16 @@ public final class DesktopPanelController: NSObject, NSWindowDelegate {
 
     public func windowDidMove(_ notification: Notification) {
         persistOrigin()
+    }
+
+    @_spi(Testing)
+    public var panelFrameForTesting: CGRect {
+        panel.frame
+    }
+
+    @_spi(Testing)
+    public func setPanelFrameForTesting(_ frame: CGRect) {
+        panel.setFrame(frame, display: false)
     }
 
     private func applyPinnedState(

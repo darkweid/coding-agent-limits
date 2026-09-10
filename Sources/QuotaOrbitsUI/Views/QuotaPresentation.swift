@@ -108,6 +108,7 @@ public struct AccountCardPresentation: Identifiable, Equatable {
 @_spi(Testing)
 public struct CodexCardPresentation: Equatable {
     public let symbol = "◇"
+    public let fiveHour: QuotaWindow?
     public let weekly: QuotaWindow?
     public let creditsBalance: Decimal?
     public let status: PresentationStatus
@@ -208,24 +209,28 @@ public struct DashboardPresentation: Equatable {
         switch source {
         case let .available(value, _):
             CodexCardPresentation(
+                fiveHour: value.fiveHour,
                 weekly: value.weekly,
                 creditsBalance: value.creditsBalance,
                 status: .fresh
             )
         case let .stale(value, lastSuccessAt, _):
             CodexCardPresentation(
+                fiveHour: value.fiveHour,
                 weekly: value.weekly,
                 creditsBalance: value.creditsBalance,
                 status: .stale(lastSuccessAt: lastSuccessAt)
             )
         case .loading:
             CodexCardPresentation(
+                fiveHour: nil,
                 weekly: nil,
                 creditsBalance: nil,
                 status: .loading
             )
         case .unavailable:
             CodexCardPresentation(
+                fiveHour: nil,
                 weekly: nil,
                 creditsBalance: nil,
                 status: .unavailable
