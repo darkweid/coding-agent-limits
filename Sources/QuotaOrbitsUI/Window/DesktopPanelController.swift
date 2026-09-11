@@ -46,6 +46,37 @@ private final class ScreenObservation: @unchecked Sendable {
     }
 }
 
+@_spi(Testing)
+@MainActor
+public protocol PanelScreenChangeScheduling: AnyObject {
+    func schedule(_ action: @escaping @MainActor () -> Void)
+    func cancel()
+}
+
+@MainActor
+private final class DelayedPanelScreenChangeScheduler: PanelScreenChangeScheduling {
+    private var task: Task<Void, Never>?
+
+    func schedule(_ action: @escaping @MainActor () -> Void) {
+        task?.cancel()
+        task = Task { [weak self] in
+            do {
+                try await Task.sleep(for: .seconds(3))
+            } catch {
+                return
+            }
+            guard !Task.isCancelled else { return }
+            action()
+            self?.task = nil
+        }
+    }
+
+    func cancel() {
+        task?.cancel()
+        task = nil
+    }
+}
+
 @MainActor
 public final class DesktopPanelController: NSObject, NSWindowDelegate {
     public static let panelSize = CGSize(width: 350, height: 372)
@@ -53,18 +84,44 @@ public final class DesktopPanelController: NSObject, NSWindowDelegate {
     private let preferences: PanelPreferences
     private let actions: DashboardActions
     private let panel: NSPanel
+    private let screenFrames: @MainActor () -> [CGRect]
+    private let screenChangeScheduler: any PanelScreenChangeScheduling
     private var screenObservation: ScreenObservation?
+    private var preferredOrigin: CGPoint
+    private var isScreenConfigurationChanging = false
+    private var isClosed = false
 
-    public init(
+    public convenience init(
         coordinator: QuotaRefreshCoordinator,
         actions: DashboardActions,
         preferences: PanelPreferences
     ) {
+        self.init(
+            coordinator: coordinator,
+            actions: actions,
+            preferences: preferences,
+            screenFrames: { NSScreen.screens.map(\.visibleFrame) },
+            notificationCenter: .default,
+            screenChangeScheduler: DelayedPanelScreenChangeScheduler()
+        )
+    }
+
+    @_spi(Testing)
+    public init(
+        coordinator: QuotaRefreshCoordinator,
+        actions: DashboardActions,
+        preferences: PanelPreferences,
+        screenFrames: @escaping @MainActor () -> [CGRect],
+        notificationCenter: NotificationCenter,
+        screenChangeScheduler: any PanelScreenChangeScheduling
+    ) {
         self.preferences = preferences
         self.actions = actions
+        self.screenFrames = screenFrames
+        self.screenChangeScheduler = screenChangeScheduler
 
         let size = Self.panelSize
-        let screens = NSScreen.screens.map(\.visibleFrame)
+        let screens = screenFrames()
         let fallbackFrame =
             NSScreen.main?.visibleFrame
             ?? screens.first
@@ -73,8 +130,9 @@ public final class DesktopPanelController: NSObject, NSWindowDelegate {
             x: fallbackFrame.maxX - size.width - 24,
             y: fallbackFrame.maxY - size.height - 24
         )
+        let preferredOrigin = preferences.panelOrigin ?? fallbackOrigin
         let origin = PanelPlacement.clampedOrigin(
-            preferences.panelOrigin ?? fallbackOrigin,
+            preferredOrigin,
             panelSize: size,
             screenFrames: screens
         )
@@ -85,6 +143,7 @@ public final class DesktopPanelController: NSObject, NSWindowDelegate {
             backing: .buffered,
             defer: false
         )
+        self.preferredOrigin = preferredOrigin
         self.panel = panel
         super.init()
 
@@ -109,26 +168,31 @@ public final class DesktopPanelController: NSObject, NSWindowDelegate {
         )
 
         applyPinnedState(preferences.isPinned, persistOrigin: false)
-        preferences.panelOrigin = origin
+        if preferences.panelOrigin == nil {
+            preferences.panelOrigin = origin
+        }
 
-        let center = NotificationCenter.default
-        let token = center.addObserver(
+        let token = notificationCenter.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification,
             object: nil,
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
-                self?.clampToCurrentScreens()
+                guard let self, !self.isClosed else { return }
+                self.isScreenConfigurationChanging = true
+                self.screenChangeScheduler.schedule { [weak self] in
+                    self?.restorePreferredOriginToCurrentScreens()
+                }
             }
         }
-        screenObservation = ScreenObservation(center: center, token: token)
+        screenObservation = ScreenObservation(center: notificationCenter, token: token)
     }
 
     public func show() {
         panel.orderFrontRegardless()
-        clampToCurrentScreens()
+        restorePreferredOriginToCurrentScreens()
         DispatchQueue.main.async { [weak self] in
-            self?.clampToCurrentScreens()
+            self?.restorePreferredOriginToCurrentScreens()
         }
     }
 
@@ -137,11 +201,16 @@ public final class DesktopPanelController: NSObject, NSWindowDelegate {
     }
 
     public func persistOrigin() {
-        preferences.panelOrigin = panel.frame.origin
+        guard !preferences.isPinned, !isScreenConfigurationChanging else { return }
+        preferredOrigin = panel.frame.origin
+        preferences.panelOrigin = preferredOrigin
     }
 
     public func close() {
+        guard !isClosed else { return }
         persistOrigin()
+        isClosed = true
+        screenChangeScheduler.cancel()
         screenObservation?.invalidate()
         screenObservation = nil
         panel.orderOut(nil)
@@ -167,7 +236,7 @@ public final class DesktopPanelController: NSObject, NSWindowDelegate {
         persistOrigin: Bool
     ) {
         if persistOrigin {
-            preferences.panelOrigin = panel.frame.origin
+            self.persistOrigin()
         }
         preferences.isPinned = isPinned
         actions.isPinned = isPinned
@@ -175,15 +244,15 @@ public final class DesktopPanelController: NSObject, NSWindowDelegate {
         panel.level = isPinned ? PanelWindowLevel.currentPinned : .floating
     }
 
-    private func clampToCurrentScreens() {
+    private func restorePreferredOriginToCurrentScreens() {
         let origin = PanelPlacement.clampedOrigin(
-            panel.frame.origin,
+            preferredOrigin,
             panelSize: panel.frame.size,
-            screenFrames: NSScreen.screens.map(\.visibleFrame)
+            screenFrames: screenFrames()
         )
         if origin != panel.frame.origin {
             panel.setFrameOrigin(origin)
         }
-        preferences.panelOrigin = origin
+        isScreenConfigurationChanging = false
     }
 }

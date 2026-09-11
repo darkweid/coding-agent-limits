@@ -177,6 +177,184 @@ enum PanelPreferencesTests {
                 )
             }
         },
+        TestCase(name: "PanelPreferencesTests.testPinnedSystemMoveKeepsPersistedOrigin") {
+            try await withPreferences { preferences, _ in
+                guard let screen = NSScreen.screens.first?.visibleFrame else {
+                    throw AssertionFailure(message: "Expected at least one screen")
+                }
+                let preferredOrigin = CGPoint(
+                    x: screen.minX + 24,
+                    y: screen.minY + 24
+                )
+                let displacedOrigin = CGPoint(
+                    x: screen.maxX - DesktopPanelController.panelSize.width - 24,
+                    y: screen.maxY - DesktopPanelController.panelSize.height - 24
+                )
+                preferences.panelOrigin = preferredOrigin
+                preferences.isPinned = true
+                let controller = makeController(preferences: preferences)
+
+                controller.setPanelFrameForTesting(
+                    CGRect(
+                        origin: displacedOrigin,
+                        size: DesktopPanelController.panelSize
+                    )
+                )
+                controller.windowDidMove(
+                    Notification(name: NSWindow.didMoveNotification)
+                )
+                controller.persistOrigin()
+                controller.close()
+
+                try TestSupport.assertEqual(
+                    preferences.panelOrigin,
+                    preferredOrigin
+                )
+            }
+        },
+        TestCase(name: "PanelPreferencesTests.testScreenReturnRestoresPersistedOrigin") {
+            try await withAsyncPreferences { preferences, _ in
+                let leftScreen = CGRect(x: 0, y: 0, width: 1_920, height: 1_049)
+                let rightScreen = CGRect(x: 1_920, y: 78, width: 1_920, height: 1_002)
+                let preferredOrigin = CGPoint(x: 3_488, y: 677)
+                let screenFrames = MutableScreenFrames([leftScreen, rightScreen])
+                let notificationCenter = NotificationCenter()
+                let scheduler = ManualPanelScreenChangeScheduler()
+                preferences.panelOrigin = preferredOrigin
+                preferences.isPinned = true
+                let controller = DesktopPanelController(
+                    coordinator: QuotaRefreshCoordinator(
+                        claude: UnusedClaudeQuotaSource(),
+                        codex: UnusedCodexQuotaSource()
+                    ),
+                    actions: DashboardActions(
+                        isPinned: true,
+                        refreshNow: {},
+                        togglePinned: {},
+                        openSettings: {},
+                        quit: {}
+                    ),
+                    preferences: preferences,
+                    screenFrames: { screenFrames.value },
+                    notificationCenter: notificationCenter,
+                    screenChangeScheduler: scheduler
+                )
+                defer { controller.close() }
+
+                screenFrames.value = [leftScreen]
+                notificationCenter.post(
+                    name: NSApplication.didChangeScreenParametersNotification,
+                    object: nil
+                )
+                await waitForMainQueue()
+                controller.setPanelFrameForTesting(
+                    CGRect(
+                        origin: CGPoint(x: 1_546, y: 653),
+                        size: DesktopPanelController.panelSize
+                    )
+                )
+                scheduler.fire()
+                try TestSupport.assertTrue(
+                    leftScreen.contains(controller.panelFrameForTesting)
+                )
+                try TestSupport.assertEqual(preferences.panelOrigin, preferredOrigin)
+
+                screenFrames.value = [leftScreen, rightScreen]
+                notificationCenter.post(
+                    name: NSApplication.didChangeScreenParametersNotification,
+                    object: nil
+                )
+                await waitForMainQueue()
+                scheduler.fire()
+
+                try TestSupport.assertEqual(
+                    controller.panelFrameForTesting.origin,
+                    preferredOrigin
+                )
+                try TestSupport.assertEqual(preferences.panelOrigin, preferredOrigin)
+            }
+        },
+        TestCase(name: "PanelPreferencesTests.testCloseIgnoresQueuedScreenChange") {
+            try await withAsyncPreferences { preferences, _ in
+                let notificationCenter = NotificationCenter()
+                let scheduler = ManualPanelScreenChangeScheduler()
+                let controller = DesktopPanelController(
+                    coordinator: QuotaRefreshCoordinator(
+                        claude: UnusedClaudeQuotaSource(),
+                        codex: UnusedCodexQuotaSource()
+                    ),
+                    actions: DashboardActions(
+                        isPinned: true,
+                        refreshNow: {},
+                        togglePinned: {},
+                        openSettings: {},
+                        quit: {}
+                    ),
+                    preferences: preferences,
+                    screenFrames: { [CGRect(x: 0, y: 0, width: 1_920, height: 1_049)] },
+                    notificationCenter: notificationCenter,
+                    screenChangeScheduler: scheduler
+                )
+
+                notificationCenter.post(
+                    name: NSApplication.didChangeScreenParametersNotification,
+                    object: nil
+                )
+                controller.close()
+                await waitForMainQueue()
+
+                try TestSupport.assertFalse(scheduler.hasPendingAction)
+            }
+        },
+        TestCase(name: "PanelPreferencesTests.testStartupRetainsOriginForReturningScreen") {
+            try await withAsyncPreferences { preferences, _ in
+                let leftScreen = CGRect(x: 0, y: 0, width: 1_920, height: 1_049)
+                let rightScreen = CGRect(x: 1_920, y: 78, width: 1_920, height: 1_002)
+                let preferredOrigin = CGPoint(x: 3_488, y: 677)
+                let screenFrames = MutableScreenFrames([leftScreen])
+                let notificationCenter = NotificationCenter()
+                let scheduler = ManualPanelScreenChangeScheduler()
+                preferences.panelOrigin = preferredOrigin
+                preferences.isPinned = true
+                let controller = DesktopPanelController(
+                    coordinator: QuotaRefreshCoordinator(
+                        claude: UnusedClaudeQuotaSource(),
+                        codex: UnusedCodexQuotaSource()
+                    ),
+                    actions: DashboardActions(
+                        isPinned: true,
+                        refreshNow: {},
+                        togglePinned: {},
+                        openSettings: {},
+                        quit: {}
+                    ),
+                    preferences: preferences,
+                    screenFrames: { screenFrames.value },
+                    notificationCenter: notificationCenter,
+                    screenChangeScheduler: scheduler
+                )
+                defer { controller.close() }
+
+                try TestSupport.assertTrue(
+                    leftScreen.contains(controller.panelFrameForTesting)
+                )
+                try TestSupport.assertEqual(preferences.panelOrigin, preferredOrigin)
+
+                screenFrames.value = [leftScreen, rightScreen]
+                notificationCenter.post(
+                    name: NSApplication.didChangeScreenParametersNotification,
+                    object: nil
+                )
+                await waitForMainQueue()
+                scheduler.fire()
+
+                try TestSupport.assertEqual(
+                    controller.panelFrameForTesting.origin,
+                    preferredOrigin
+                )
+                try TestSupport.assertEqual(preferences.panelOrigin, preferredOrigin)
+            }
+        },
         TestCase(name: "PanelWindowLevelTests.testPinnedPanelSitsAboveDesktopIconsAndBelowApps") {
             let desktopIcons = -20
             let normalWindows = 0
@@ -226,6 +404,26 @@ enum PanelPreferencesTests {
             }
         }
     }
+
+    @MainActor
+    private static func makeController(
+        preferences: PanelPreferences
+    ) -> DesktopPanelController {
+        DesktopPanelController(
+            coordinator: QuotaRefreshCoordinator(
+                claude: UnusedClaudeQuotaSource(),
+                codex: UnusedCodexQuotaSource()
+            ),
+            actions: DashboardActions(
+                isPinned: preferences.isPinned,
+                refreshNow: {},
+                togglePinned: {},
+                openSettings: {},
+                quit: {}
+            ),
+            preferences: preferences
+        )
+    }
 }
 
 private struct UnusedClaudeQuotaSource: ClaudeQuotaFetching {
@@ -241,3 +439,35 @@ private struct UnusedCodexQuotaSource: CodexQuotaFetching {
 }
 
 private struct UnusedQuotaSourceError: Error {}
+
+@MainActor
+private final class MutableScreenFrames {
+    var value: [CGRect]
+
+    init(_ value: [CGRect]) {
+        self.value = value
+    }
+}
+
+@MainActor
+private final class ManualPanelScreenChangeScheduler: PanelScreenChangeScheduling {
+    private var action: (@MainActor () -> Void)?
+
+    var hasPendingAction: Bool {
+        action != nil
+    }
+
+    func schedule(_ action: @escaping @MainActor () -> Void) {
+        self.action = action
+    }
+
+    func cancel() {
+        action = nil
+    }
+
+    func fire() {
+        let action = action
+        self.action = nil
+        action?()
+    }
+}
