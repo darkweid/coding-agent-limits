@@ -19,8 +19,13 @@ struct CodexQuotaCard: View {
     private func content(now: Date) -> some View {
         VStack(spacing: 5) {
             HStack(spacing: 7) {
-                Text(quota.symbol)
-                    .font(.system(size: 17, weight: .medium, design: .rounded))
+                OpenAIMark()
+                    .frame(width: 16, height: 16)
+                    .foregroundStyle(Color.white.opacity(0.72))
+                    .accessibilityLabel(ProviderHeaderCopy.openAIAccessibilityLabel)
+
+                Text(ProviderHeaderCopy.codexTitle)
+                    .font(.system(size: 14, weight: .semibold, design: .rounded))
                     .foregroundStyle(Color.white.opacity(0.58))
 
                 if let balance = quota.creditsBalance {
@@ -31,6 +36,7 @@ struct CodexQuotaCard: View {
                 }
                 Spacer()
             }
+            .accessibilityElement(children: .combine)
 
             QuotaBarView(
                 window: "5 hours",

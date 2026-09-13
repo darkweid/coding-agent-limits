@@ -15,7 +15,8 @@ public enum QuotaCopy {
 
     public static func resetCountdown(window: QuotaWindow?, now: Date) -> String {
         guard let window else { return "no data" }
-        return ResetCountdownFormatter.string(until: window.resetsAt, now: now)
+        guard let resetsAt = window.resetsAt else { return "reset unavailable" }
+        return ResetCountdownFormatter.string(until: resetsAt, now: now)
     }
 
     public static func stale(lastSuccessAt: Date, now: Date) -> String {
@@ -50,6 +51,18 @@ public enum DashboardCopy {
             "Settings…",
             "Quit",
         ]
+    }
+}
+
+@_spi(Testing)
+public enum ProviderHeaderCopy {
+    public static let claudeMark = "✳"
+    public static let codexTitle = "codex"
+    public static let openAIAccessibilityLabel = "OpenAI"
+
+    public static func claudeAccessibilityLabel(alias: String, isActive: Bool) -> String {
+        let identity = "Claude \(alias)"
+        return isActive ? "\(identity), active account" : identity
     }
 }
 
@@ -102,12 +115,12 @@ public struct AccountCardPresentation: Identifiable, Equatable {
     public let isActive: Bool
     public let fiveHour: QuotaWindow?
     public let weekly: QuotaWindow?
+    public let scoped: [ClaudeScopedQuota]
     public let status: PresentationStatus
 }
 
 @_spi(Testing)
 public struct CodexCardPresentation: Equatable {
-    public let symbol = "◇"
     public let fiveHour: QuotaWindow?
     public let weekly: QuotaWindow?
     public let creditsBalance: Decimal?
@@ -136,9 +149,9 @@ public struct DashboardPresentation: Equatable {
     ) -> [AccountCardPresentation] {
         switch source {
         case let .available(values, _):
-            return accountCards(values: values, status: .fresh)
+            return accountCards(values: values)
         case let .stale(values, lastSuccessAt, _):
-            return accountCards(values: values, status: .stale(lastSuccessAt: lastSuccessAt))
+            return accountCards(values: values, sourceStaleAt: lastSuccessAt)
         case .loading:
             return placeholderAccounts(status: .loading)
         case .unavailable:
@@ -148,7 +161,7 @@ public struct DashboardPresentation: Equatable {
 
     private static func accountCards(
         values: [ClaudeAccountQuota],
-        status: PresentationStatus
+        sourceStaleAt: Date? = nil
     ) -> [AccountCardPresentation] {
         var result = values.prefix(2).enumerated().map { index, account in
             AccountCardPresentation(
@@ -157,7 +170,8 @@ public struct DashboardPresentation: Equatable {
                 isActive: account.isActive,
                 fiveHour: account.fiveHour,
                 weekly: account.weekly,
-                status: status
+                scoped: safeScoped(account.scoped),
+                status: accountStatus(account.state, sourceStaleAt: sourceStaleAt)
             )
         }
         while result.count < 2 {
@@ -165,6 +179,24 @@ public struct DashboardPresentation: Equatable {
             result.append(placeholderAccount(slot: slot))
         }
         return result
+    }
+
+    private static func accountStatus(
+        _ state: ClaudeAccountQuotaState,
+        sourceStaleAt: Date?
+    ) -> PresentationStatus {
+        switch state {
+        case .unavailable:
+            return .unavailable
+        case .fresh:
+            guard let sourceStaleAt else { return .fresh }
+            return .stale(lastSuccessAt: sourceStaleAt)
+        case let .stale(accountStaleAt):
+            guard let sourceStaleAt else {
+                return .stale(lastSuccessAt: accountStaleAt)
+            }
+            return .stale(lastSuccessAt: min(accountStaleAt, sourceStaleAt))
+        }
     }
 
     private static func placeholderAccounts(
@@ -186,6 +218,7 @@ public struct DashboardPresentation: Equatable {
             isActive: false,
             fiveHour: nil,
             weekly: nil,
+            scoped: [],
             status: status
         )
     }
@@ -201,6 +234,25 @@ public struct DashboardPresentation: Equatable {
             return String(format: "%02d", slot + 1)
         }
         return trimmed
+    }
+
+    private static func safeScoped(
+        _ values: [ClaudeScopedQuota]
+    ) -> [ClaudeScopedQuota] {
+        let safeValues = values.compactMap { value -> ClaudeScopedQuota? in
+            let label = value.label.trimmingCharacters(in: .whitespacesAndNewlines)
+            let lowered = label.lowercased()
+            guard !label.isEmpty,
+                label.count <= 40,
+                !label.contains("@"),
+                !["claude", "codex"].contains(where: lowered.contains),
+                label.unicodeScalars.allSatisfy({
+                    !CharacterSet.controlCharacters.contains($0)
+                })
+            else { return nil }
+            return ClaudeScopedQuota(label: label, window: value.window)
+        }
+        return Array(safeValues.prefix(1))
     }
 
     private static func codex(

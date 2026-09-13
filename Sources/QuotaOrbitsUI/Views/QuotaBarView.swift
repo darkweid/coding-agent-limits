@@ -19,6 +19,7 @@ public enum QuotaBarAccessibility {
     public static func value(
         window: String,
         used: Double?,
+        countdown: String,
         dataState: QuotaBarDataState
     ) -> String {
         switch dataState {
@@ -28,7 +29,7 @@ public enum QuotaBarAccessibility {
             return "\(window), no data"
         case .available:
             guard let used else { return "\(window), no data" }
-            return "\(window), \(QuotaCopy.percent(used)) used"
+            return "\(window), \(QuotaCopy.percent(used)) used, \(countdown)"
         }
     }
 }
@@ -77,6 +78,7 @@ struct QuotaBarView: View {
             QuotaBarAccessibility.value(
                 window: window,
                 used: usedPercent,
+                countdown: countdown,
                 dataState: dataState
             )
         )

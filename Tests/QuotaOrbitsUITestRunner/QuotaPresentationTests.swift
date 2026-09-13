@@ -16,6 +16,13 @@ enum QuotaPresentationTests {
                 QuotaCopy.resetCountdown(window: window(remaining: 28, minutes: 205), now: now),
                 "resets in 3h 25m"
             )
+            try TestSupport.assertEqual(
+                QuotaCopy.resetCountdown(
+                    window: QuotaWindow(usedPercent: 100, resetsAt: nil),
+                    now: now
+                ),
+                "reset unavailable"
+            )
             try TestSupport.assertEqual(QuotaCopy.resetCountdown(window: nil, now: now), "no data")
             try TestSupport.assertEqual(
                 QuotaCopy.stale(lastSuccessAt: now.addingTimeInterval(-125), now: now),
@@ -30,6 +37,19 @@ enum QuotaPresentationTests {
             try TestSupport.assertEqual(
                 DashboardCopy.contextActions(isPinned: false),
                 ["Refresh Now", "Pin", "Settings…", "Quit"]
+            )
+        },
+        TestCase(name: "QuotaPresentationTests.testProviderHeadersUseBrandMarksAndStableNames") {
+            try TestSupport.assertEqual(ProviderHeaderCopy.claudeMark, "✳")
+            try TestSupport.assertEqual(ProviderHeaderCopy.codexTitle, "codex")
+            try TestSupport.assertEqual(ProviderHeaderCopy.openAIAccessibilityLabel, "OpenAI")
+            try TestSupport.assertEqual(
+                ProviderHeaderCopy.claudeAccessibilityLabel(alias: "max", isActive: true),
+                "Claude max, active account"
+            )
+            try TestSupport.assertEqual(
+                ProviderHeaderCopy.claudeAccessibilityLabel(alias: "pro", isActive: false),
+                "Claude pro"
             )
         },
         TestCase(
@@ -57,14 +77,33 @@ enum QuotaPresentationTests {
             try TestSupport.assertEqual(presentation.accounts.map(\.id), ["slot-1", "slot-2"])
             try TestSupport.assertEqual(
                 presentation.accounts[0].status.text(now: now), "updated 2 min ago")
-            try TestSupport.assertEqual(presentation.codex.symbol, "◇")
             try TestSupport.assertEqual(presentation.codex.status.text(now: now), "no data")
         },
         TestCase(
             name: "QuotaPresentationTests.testDashboardProjectionKeepsTwoAliasesAndLatestSuccess"
         ) {
             let accounts = [
-                account(id: "one", alias: "max", active: true, inner: 100, outer: 81),
+                account(
+                    id: "one",
+                    alias: "max",
+                    active: true,
+                    inner: 100,
+                    outer: 81,
+                    scoped: [
+                        ClaudeScopedQuota(
+                            label: "Fable",
+                            window: window(remaining: 21)
+                        ),
+                        ClaudeScopedQuota(
+                            label: "Other",
+                            window: window(remaining: 75)
+                        ),
+                        ClaudeScopedQuota(
+                            label: "private@example.invalid",
+                            window: window(remaining: 88)
+                        ),
+                    ]
+                ),
                 account(
                     id: "two", alias: "очень-длинное-нейтральное-имя", active: false, inner: 28,
                     outer: 93),
@@ -84,6 +123,11 @@ enum QuotaPresentationTests {
                 presentation.accounts.map(\.fiveHour?.remainingPercent), [100, 28])
             try TestSupport.assertEqual(
                 presentation.accounts.map(\.weekly?.remainingPercent), [81, 93])
+            try TestSupport.assertEqual(
+                presentation.accounts[0].scoped.map(\.label), ["Fable"])
+            try TestSupport.assertEqual(
+                presentation.accounts[0].scoped.map(\.window.remainingPercent), [21])
+            try TestSupport.assertEqual(presentation.accounts[1].scoped, [])
             try TestSupport.assertEqual(presentation.codex.fiveHour?.remainingPercent, 25)
             try TestSupport.assertEqual(presentation.codex.weekly?.remainingPercent, 50)
             try TestSupport.assertEqual(presentation.lastSuccessfulRefreshAt, now)
@@ -107,6 +151,30 @@ enum QuotaPresentationTests {
             )
             try TestSupport.assertEqual(presentation.codex.status.text(now: now), "no data")
             try TestSupport.assertEqual(presentation.lastSuccessfulRefreshAt, nil)
+        },
+        TestCase(name: "QuotaPresentationTests.testAvailableSourcePreservesPerAccountFreshness") {
+            let cachedAt = now.addingTimeInterval(-300)
+            let accounts = [
+                account(
+                    id: "one", alias: "max", active: true, inner: 27, outer: 59,
+                    state: .stale(lastSuccessAt: cachedAt)),
+                account(
+                    id: "two", alias: "pro", active: false, inner: 88, outer: 76,
+                    state: .fresh),
+            ]
+
+            let presentation = DashboardPresentation(
+                snapshot: QuotaSnapshot(
+                    claude: .available(accounts, updatedAt: now),
+                    codex: .unavailable(message: "unavailable")
+                )
+            )
+
+            try TestSupport.assertEqual(
+                presentation.accounts[0].status,
+                .stale(lastSuccessAt: cachedAt)
+            )
+            try TestSupport.assertEqual(presentation.accounts[1].status, .fresh)
         },
         TestCase(
             name: "QuotaPresentationTests.testLoadingProjectionKeepsPlaceholdersWithoutFailureCopy"
@@ -144,14 +212,25 @@ enum QuotaPresentationTests {
                 QuotaBarAccessibility.value(
                     window: "5 hours",
                     used: 72,
+                    countdown: "resets in 3h 25m",
                     dataState: .available
                 ),
-                "5 hours, 72% used"
+                "5 hours, 72% used, resets in 3h 25m"
+            )
+            try TestSupport.assertEqual(
+                QuotaBarAccessibility.value(
+                    window: "5 hours",
+                    used: 100,
+                    countdown: "reset unavailable",
+                    dataState: .available
+                ),
+                "5 hours, 100% used, reset unavailable"
             )
             try TestSupport.assertEqual(
                 QuotaBarAccessibility.value(
                     window: "7 days",
                     used: nil,
+                    countdown: "—",
                     dataState: .loading
                 ),
                 "7 days, loading"
@@ -160,6 +239,7 @@ enum QuotaPresentationTests {
                 QuotaBarAccessibility.value(
                     window: "7 days",
                     used: nil,
+                    countdown: "no data",
                     dataState: .unavailable
                 ),
                 "7 days, no data"
@@ -191,14 +271,18 @@ enum QuotaPresentationTests {
         alias: String,
         active: Bool,
         inner: Double,
-        outer: Double
+        outer: Double,
+        scoped: [ClaudeScopedQuota] = [],
+        state: ClaudeAccountQuotaState = .fresh
     ) -> ClaudeAccountQuota {
         ClaudeAccountQuota(
             id: id,
             alias: alias,
             isActive: active,
             fiveHour: window(remaining: inner),
-            weekly: window(remaining: outer)
+            weekly: window(remaining: outer),
+            scoped: scoped,
+            state: state
         )
     }
 

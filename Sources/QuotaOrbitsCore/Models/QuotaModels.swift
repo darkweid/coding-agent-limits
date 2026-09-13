@@ -17,9 +17,9 @@ public enum QuotaLevel: Equatable, Sendable {
 public struct QuotaWindow: Equatable, Sendable {
     public let usedPercent: Double
     public let remainingPercent: Double
-    public let resetsAt: Date
+    public let resetsAt: Date?
 
-    public init(usedPercent: Double, resetsAt: Date) {
+    public init(usedPercent: Double, resetsAt: Date?) {
         let normalizedUsed = min(max(usedPercent, 0), 100)
         self.usedPercent = normalizedUsed
         self.remainingPercent = 100 - normalizedUsed
@@ -27,25 +27,47 @@ public struct QuotaWindow: Equatable, Sendable {
     }
 }
 
+public struct ClaudeScopedQuota: Equatable, Sendable {
+    public let label: String
+    public let window: QuotaWindow
+
+    public init(label: String, window: QuotaWindow) {
+        self.label = label
+        self.window = window
+    }
+}
+
+public enum ClaudeAccountQuotaState: Equatable, Sendable {
+    case fresh
+    case stale(lastSuccessAt: Date)
+    case unavailable
+}
+
 public struct ClaudeAccountQuota: Equatable, Sendable {
     public let id: String
     public let alias: String
     public let isActive: Bool
-    public let fiveHour: QuotaWindow
-    public let weekly: QuotaWindow
+    public let fiveHour: QuotaWindow?
+    public let weekly: QuotaWindow?
+    public let scoped: [ClaudeScopedQuota]
+    public let state: ClaudeAccountQuotaState
 
     public init(
         id: String,
         alias: String,
         isActive: Bool,
-        fiveHour: QuotaWindow,
-        weekly: QuotaWindow
+        fiveHour: QuotaWindow?,
+        weekly: QuotaWindow?,
+        scoped: [ClaudeScopedQuota] = [],
+        state: ClaudeAccountQuotaState = .fresh
     ) {
         self.id = id
         self.alias = alias
         self.isActive = isActive
         self.fiveHour = fiveHour
         self.weekly = weekly
+        self.scoped = scoped
+        self.state = state
     }
 }
 

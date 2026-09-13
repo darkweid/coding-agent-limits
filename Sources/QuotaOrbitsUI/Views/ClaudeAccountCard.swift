@@ -19,6 +19,10 @@ struct ClaudeAccountCard: View {
     private func content(now: Date) -> some View {
         VStack(spacing: 5) {
             HStack(spacing: 6) {
+                Text(ProviderHeaderCopy.claudeMark)
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundStyle(Color(red: 0.85, green: 0.43, blue: 0.29))
+                    .accessibilityHidden(true)
                 Text(account.alias)
                     .font(.system(size: 14, weight: .semibold, design: .rounded))
                     .foregroundStyle(Color.white.opacity(0.58))
@@ -33,6 +37,13 @@ struct ClaudeAccountCard: View {
                         .accessibilityLabel("Active account")
                 }
             }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(
+                ProviderHeaderCopy.claudeAccessibilityLabel(
+                    alias: account.alias,
+                    isActive: account.isActive
+                )
+            )
 
             QuotaBarView(
                 window: "5 hours",
@@ -53,6 +64,18 @@ struct ClaudeAccountCard: View {
                 usedPercent: account.weekly?.usedPercent,
                 dataState: account.status.barDataState
             )
+
+            ForEach(Array(account.scoped.enumerated()), id: \.offset) { _, scoped in
+                QuotaBarView(
+                    window: scoped.label,
+                    countdown: account.status.resetCountdown(
+                        window: scoped.window,
+                        now: now
+                    ),
+                    usedPercent: scoped.window.usedPercent,
+                    dataState: account.status.barDataState
+                )
+            }
 
             statusLine(now: now)
         }
