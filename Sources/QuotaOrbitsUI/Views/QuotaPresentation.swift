@@ -43,6 +43,27 @@ public enum QuotaCopy {
 }
 
 @_spi(Testing)
+public enum QuotaDisplayValue {
+    public static func percent(
+        usedPercent: Double?,
+        mode: QuotaDisplayMode
+    ) -> Double? {
+        guard let usedPercent else { return nil }
+        return switch mode {
+        case .used: usedPercent
+        case .remaining: 100 - usedPercent
+        }
+    }
+
+    public static func label(for mode: QuotaDisplayMode) -> String {
+        switch mode {
+        case .used: "used"
+        case .remaining: "remaining"
+        }
+    }
+}
+
+@_spi(Testing)
 public enum DashboardCopy {
     public static func contextActions(isPinned: Bool) -> [String] {
         [

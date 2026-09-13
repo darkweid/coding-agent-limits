@@ -69,7 +69,8 @@ final class AppRuntime {
         coordinator = QuotaRefreshCoordinator(
             claude: claudeSource,
             codex: codexSource,
-            ticker: MinuteTicker()
+            ticker: MinuteTicker(),
+            refreshInterval: .seconds(preferences.refreshIntervalSeconds)
         )
 
         installWorkspaceObservers()
@@ -89,6 +90,10 @@ final class AppRuntime {
             await coordinator.refreshNow()
             manualRefreshTask = nil
         }
+    }
+
+    func updateRefreshInterval(seconds: Int) {
+        coordinator.updateRefreshInterval(.seconds(seconds))
     }
 
     func updateCswapPath(_ path: String) {

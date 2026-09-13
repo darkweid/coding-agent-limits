@@ -29,6 +29,33 @@ enum QuotaPresentationTests {
                 "updated 2 min ago")
             try TestSupport.assertEqual(QuotaCopy.credits(credits), "411.51")
         },
+        TestCase(name: "QuotaPresentationTests.testDisplayModeProjectsUsedOrRemaining") {
+            try TestSupport.assertEqual(
+                QuotaDisplayValue.percent(usedPercent: 72, mode: .used),
+                72
+            )
+            try TestSupport.assertEqual(
+                QuotaDisplayValue.percent(usedPercent: 72, mode: .remaining),
+                28
+            )
+            try TestSupport.assertEqual(
+                QuotaDisplayValue.percent(usedPercent: nil, mode: .remaining),
+                nil
+            )
+            try TestSupport.assertEqual(
+                QuotaDisplayValue.label(for: .used),
+                "used"
+            )
+            try TestSupport.assertEqual(
+                QuotaDisplayValue.label(for: .remaining),
+                "remaining"
+            )
+        },
+        TestCase(name: "SettingsViewTests.testRefreshIntervalLabelIsCompact") {
+            try TestSupport.assertEqual(SettingsPresentation.refreshLabel(seconds: 30), "30 sec")
+            try TestSupport.assertEqual(SettingsPresentation.refreshLabel(seconds: 60), "1 min")
+            try TestSupport.assertEqual(SettingsPresentation.refreshLabel(seconds: 150), "2m 30s")
+        },
         TestCase(name: "QuotaPresentationTests.testContextActionsUseNeutralApprovedCopy") {
             try TestSupport.assertEqual(
                 DashboardCopy.contextActions(isPinned: true),
@@ -59,22 +86,42 @@ enum QuotaPresentationTests {
             try TestSupport.assertEqual(ProviderMarkMetrics.openAILobeOffset, 2.5)
             try TestSupport.assertEqual(ProviderMarkMetrics.openAIOuterRadius, 7.5)
         },
+        TestCase(name: "QuotaPresentationTests.testOrbitGaugeUsesProminentDiameter") {
+            try TestSupport.assertEqual(QuotaOrbitMetrics.diameter, 55.2)
+            try TestSupport.assertEqual(
+                DashboardLayout.requiredClaudeSectionHeight(
+                    scopedCounts: [1, 0],
+                    visualStyle: .orbits
+                ),
+                DashboardLayout.claudeSectionHeight(for: .orbits)
+            )
+            try TestSupport.assertEqual(
+                DashboardLayout.claudeAccountHeight(
+                    scopedCount: 0,
+                    visualStyle: .orbits
+                ),
+                140
+            )
+        },
         TestCase(name: "QuotaPresentationTests.testDashboardFitsOneScopedClaudeCardWithoutOverlap")
         {
-            let panelHeight = await MainActor.run { DesktopPanelController.panelSize.height }
+            let panelHeight = await MainActor.run {
+                DesktopPanelController.panelSize(for: .bars).height
+            }
 
             try TestSupport.assertEqual(
                 DashboardLayout.requiredClaudeSectionHeight(scopedCounts: [1, 0]),
                 250
             )
             try TestSupport.assertTrue(
-                DashboardLayout.claudeSectionHeight
+                DashboardLayout.claudeSectionHeight(for: .bars)
                     >= DashboardLayout.requiredClaudeSectionHeight(scopedCounts: [1, 0])
             )
-            try TestSupport.assertEqual(DashboardLayout.totalContentHeight, 406)
+            try TestSupport.assertEqual(DashboardLayout.totalContentHeight(for: .bars), 406)
+            try TestSupport.assertEqual(DashboardLayout.totalContentHeight(for: .orbits), 480)
             try TestSupport.assertEqual(
                 panelHeight,
-                DashboardLayout.panelHeight
+                DashboardLayout.panelHeight(for: .bars)
             )
         },
         TestCase(
@@ -180,7 +227,7 @@ enum QuotaPresentationTests {
             )
             try TestSupport.assertTrue(
                 DashboardLayout.requiredClaudeSectionHeight(scopedCounts: [0, 0, 0, 0])
-                    > DashboardLayout.claudeSectionHeight
+                    > DashboardLayout.claudeSectionHeight(for: .bars)
             )
         },
         TestCase(name: "QuotaPresentationTests.testUnavailableProjectionUsesNeutralPlaceholders") {

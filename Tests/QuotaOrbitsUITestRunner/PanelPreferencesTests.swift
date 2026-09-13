@@ -82,6 +82,30 @@ enum PanelPreferencesTests {
                 )
             }
         },
+        TestCase(name: "PanelPreferencesTests.testDisplayPreferencesRoundTrip") {
+            try await withPreferences { preferences, defaults in
+                preferences.refreshIntervalSeconds = 150
+                preferences.displayMode = .remaining
+                preferences.visualStyle = .orbits
+
+                let restored = PanelPreferences(defaults: defaults)
+                try TestSupport.assertEqual(restored.refreshIntervalSeconds, 150)
+                try TestSupport.assertEqual(restored.displayMode, .remaining)
+                try TestSupport.assertEqual(restored.visualStyle, .orbits)
+            }
+        },
+        TestCase(name: "PanelPreferencesTests.testRefreshIntervalIsNormalized") {
+            try await withPreferences { preferences, defaults in
+                preferences.refreshIntervalSeconds = 17
+                try TestSupport.assertEqual(preferences.refreshIntervalSeconds, 30)
+
+                preferences.refreshIntervalSeconds = 617
+                try TestSupport.assertEqual(preferences.refreshIntervalSeconds, 600)
+
+                let restored = PanelPreferences(defaults: defaults)
+                try TestSupport.assertEqual(restored.refreshIntervalSeconds, 600)
+            }
+        },
         TestCase(name: "PanelPreferencesTests.testOnlyApprovedPreferenceKeysArePersisted") {
             try await withPreferences { preferences, defaults in
                 preferences.cswapPath = "/approved/cswap"
@@ -212,11 +236,31 @@ enum PanelPreferencesTests {
                 )
             }
         },
+        TestCase(name: "PanelPreferencesTests.testStyleChangeResizesPanelFromItsTopEdge") {
+            try await withAsyncPreferences { preferences, _ in
+                preferences.visualStyle = .bars
+                let controller = makeController(preferences: preferences)
+                defer { controller.close() }
+                let originalFrame = controller.panelFrameForTesting
+
+                preferences.visualStyle = .orbits
+                await waitForMainQueue()
+
+                try TestSupport.assertEqual(
+                    controller.panelFrameForTesting.height,
+                    DashboardLayout.panelHeight(for: .orbits)
+                )
+                try TestSupport.assertEqual(
+                    controller.panelFrameForTesting.maxY,
+                    originalFrame.maxY
+                )
+            }
+        },
         TestCase(name: "PanelPreferencesTests.testScreenReturnRestoresPersistedOrigin") {
             try await withAsyncPreferences { preferences, _ in
                 let leftScreen = CGRect(x: 0, y: 0, width: 1_920, height: 1_049)
                 let rightScreen = CGRect(x: 1_920, y: 78, width: 1_920, height: 1_002)
-                let preferredOrigin = CGPoint(x: 3_488, y: 650)
+                let preferredOrigin = CGPoint(x: 3_488, y: 600)
                 let screenFrames = MutableScreenFrames([leftScreen, rightScreen])
                 let notificationCenter = NotificationCenter()
                 let scheduler = ManualPanelScreenChangeScheduler()
@@ -310,7 +354,7 @@ enum PanelPreferencesTests {
             try await withAsyncPreferences { preferences, _ in
                 let leftScreen = CGRect(x: 0, y: 0, width: 1_920, height: 1_049)
                 let rightScreen = CGRect(x: 1_920, y: 78, width: 1_920, height: 1_002)
-                let preferredOrigin = CGPoint(x: 3_488, y: 650)
+                let preferredOrigin = CGPoint(x: 3_488, y: 600)
                 let screenFrames = MutableScreenFrames([leftScreen])
                 let notificationCenter = NotificationCenter()
                 let scheduler = ManualPanelScreenChangeScheduler()

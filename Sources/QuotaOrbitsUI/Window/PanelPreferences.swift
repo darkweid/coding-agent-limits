@@ -1,6 +1,20 @@
 import Combine
 import Foundation
 
+public enum QuotaDisplayMode: String, CaseIterable, Identifiable, Sendable {
+    case used
+    case remaining
+
+    public var id: Self { self }
+}
+
+public enum QuotaVisualStyle: String, CaseIterable, Identifiable, Sendable {
+    case bars
+    case orbits
+
+    public var id: Self { self }
+}
+
 @MainActor
 public final class PanelPreferences: ObservableObject {
     public static let defaultCswapPath = ExecutablePathResolver.defaultCswapPath(
@@ -17,6 +31,25 @@ public final class PanelPreferences: ObservableObject {
 
     @Published public var codexPath: String {
         didSet { defaults.set(codexPath, forKey: Keys.codexPath) }
+    }
+
+    @Published public var refreshIntervalSeconds: Int {
+        didSet {
+            let normalized = Self.normalizedRefreshInterval(refreshIntervalSeconds)
+            if normalized != refreshIntervalSeconds {
+                refreshIntervalSeconds = normalized
+                return
+            }
+            defaults.set(normalized, forKey: Keys.refreshIntervalSeconds)
+        }
+    }
+
+    @Published public var displayMode: QuotaDisplayMode {
+        didSet { defaults.set(displayMode.rawValue, forKey: Keys.displayMode) }
+    }
+
+    @Published public var visualStyle: QuotaVisualStyle {
+        didSet { defaults.set(visualStyle.rawValue, forKey: Keys.visualStyle) }
     }
 
     @Published public var panelOrigin: CGPoint? {
@@ -38,6 +71,9 @@ public final class PanelPreferences: ObservableObject {
     private enum Keys {
         static let cswapPath = "quotaOrbits.cswapPath"
         static let codexPath = "quotaOrbits.codexPath"
+        static let refreshIntervalSeconds = "quotaOrbits.refreshIntervalSeconds"
+        static let displayMode = "quotaOrbits.displayMode"
+        static let visualStyle = "quotaOrbits.visualStyle"
         static let panelOriginX = "quotaOrbits.panelOrigin.x"
         static let panelOriginY = "quotaOrbits.panelOrigin.y"
         static let isPinned = "quotaOrbits.isPinned"
@@ -53,6 +89,16 @@ public final class PanelPreferences: ObservableObject {
         codexPath =
             defaults.string(forKey: Keys.codexPath)
             ?? Self.defaultCodexPath
+        let storedInterval =
+            defaults.object(forKey: Keys.refreshIntervalSeconds) == nil
+            ? 60 : defaults.integer(forKey: Keys.refreshIntervalSeconds)
+        refreshIntervalSeconds = Self.normalizedRefreshInterval(storedInterval)
+        displayMode =
+            defaults.string(forKey: Keys.displayMode)
+            .flatMap(QuotaDisplayMode.init(rawValue:)) ?? .used
+        visualStyle =
+            defaults.string(forKey: Keys.visualStyle)
+            .flatMap(QuotaVisualStyle.init(rawValue:)) ?? .bars
 
         if defaults.object(forKey: Keys.panelOriginX) != nil,
             defaults.object(forKey: Keys.panelOriginY) != nil
@@ -70,6 +116,11 @@ public final class PanelPreferences: ObservableObject {
         } else {
             isPinned = defaults.bool(forKey: Keys.isPinned)
         }
+    }
+
+    private static func normalizedRefreshInterval(_ value: Int) -> Int {
+        let clamped = min(max(value, 30), 600)
+        return Int((Double(clamped) / 30).rounded()) * 30
     }
 }
 

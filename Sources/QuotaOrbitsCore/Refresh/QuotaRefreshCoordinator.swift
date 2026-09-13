@@ -10,10 +10,11 @@ public final class QuotaRefreshCoordinator: ObservableObject {
     private let codexGate: SourceFetchGate<CodexQuota>
     private let ticker: any RefreshTicking
     private let now: @Sendable () -> Date
-    private let refreshInterval: Duration
+    private var refreshInterval: Duration
     private let timeout: Duration
     private let timeoutScheduler: any RefreshTimeoutScheduling
     private var tickerTask: Task<Void, Never>?
+    private var shouldRestartTickerAfterRefresh = false
     private var isAwaitingInitialTick = false
     private var nextIdleWaiterID = 0
     private var idleWaiters: [Int: CheckedContinuation<Void, Never>] = [:]
@@ -64,6 +65,27 @@ public final class QuotaRefreshCoordinator: ObservableObject {
 
     public func start() {
         guard tickerTask == nil else { return }
+        startTicker()
+    }
+
+    public func updateRefreshInterval(_ interval: Duration) {
+        guard interval != refreshInterval else { return }
+        refreshInterval = interval
+        guard tickerTask != nil else { return }
+        if isRefreshing {
+            shouldRestartTickerAfterRefresh = true
+            return
+        }
+        restartTicker()
+    }
+
+    private func restartTicker() {
+        tickerTask?.cancel()
+        tickerTask = nil
+        startTicker()
+    }
+
+    private func startTicker() {
         isAwaitingInitialTick = true
         let ticks = ticker.ticks(every: refreshInterval)
         tickerTask = Task { [weak self] in
@@ -77,6 +99,7 @@ public final class QuotaRefreshCoordinator: ObservableObject {
     public func stop() {
         tickerTask?.cancel()
         tickerTask = nil
+        shouldRestartTickerAfterRefresh = false
         isAwaitingInitialTick = false
         resumeIdleWaitersIfNeeded()
     }
@@ -89,6 +112,10 @@ public final class QuotaRefreshCoordinator: ObservableObject {
         SafeLogger.cycleStarted()
         defer {
             isRefreshing = false
+            if shouldRestartTickerAfterRefresh {
+                shouldRestartTickerAfterRefresh = false
+                restartTicker()
+            }
             resumeIdleWaitersIfNeeded()
         }
 

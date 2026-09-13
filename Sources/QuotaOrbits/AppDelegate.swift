@@ -17,6 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
 
     var settingsView: some View {
         SettingsView(
+            preferences: preferences,
             cswapPath: Binding(
                 get: { [weak self] in
                     self?.preferences.cswapPath
@@ -30,6 +31,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
                         ?? PanelPreferences.defaultCodexPath
                 },
                 set: { [weak self] in self?.setCodexPath($0) }
+            ),
+            refreshIntervalSeconds: Binding(
+                get: { [weak self] in self?.preferences.refreshIntervalSeconds ?? 60 },
+                set: { [weak self] in self?.setRefreshInterval($0) }
+            ),
+            displayMode: Binding(
+                get: { [weak self] in self?.preferences.displayMode ?? .used },
+                set: { [weak self] in self?.preferences.displayMode = $0 }
+            ),
+            visualStyle: Binding(
+                get: { [weak self] in self?.preferences.visualStyle ?? .bars },
+                set: { [weak self] in self?.preferences.visualStyle = $0 }
             ),
             launchAtLogin: Binding(
                 get: { [weak self] in self?.launchAtLogin.isEnabled ?? false },
@@ -112,6 +125,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         } else {
             preferences.codexPath = path
         }
+    }
+
+    private func setRefreshInterval(_ seconds: Int) {
+        preferences.refreshIntervalSeconds = seconds
+        runtime?.updateRefreshInterval(seconds: preferences.refreshIntervalSeconds)
     }
 
     private func setLaunchAtLogin(_ enabled: Bool) {

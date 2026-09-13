@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import QuotaOrbitsCore
 import SwiftUI
 
@@ -79,10 +80,14 @@ private final class DelayedPanelScreenChangeScheduler: PanelScreenChangeScheduli
 
 @MainActor
 public final class DesktopPanelController: NSObject, NSWindowDelegate {
-    public static let panelSize = CGSize(
-        width: DashboardLayout.panelWidth,
-        height: DashboardLayout.panelHeight
-    )
+    public static let panelSize = panelSize(for: .bars)
+
+    public static func panelSize(for visualStyle: QuotaVisualStyle) -> CGSize {
+        CGSize(
+            width: DashboardLayout.panelWidth,
+            height: DashboardLayout.panelHeight(for: visualStyle)
+        )
+    }
 
     private let preferences: PanelPreferences
     private let actions: DashboardActions
@@ -90,6 +95,8 @@ public final class DesktopPanelController: NSObject, NSWindowDelegate {
     private let screenFrames: @MainActor () -> [CGRect]
     private let screenChangeScheduler: any PanelScreenChangeScheduling
     private var screenObservation: ScreenObservation?
+    private var styleObservation: AnyCancellable?
+    private var visualStyle: QuotaVisualStyle
     private var preferredOrigin: CGPoint
     private var isScreenConfigurationChanging = false
     private var isClosed = false
@@ -122,8 +129,9 @@ public final class DesktopPanelController: NSObject, NSWindowDelegate {
         self.actions = actions
         self.screenFrames = screenFrames
         self.screenChangeScheduler = screenChangeScheduler
+        visualStyle = preferences.visualStyle
 
-        let size = Self.panelSize
+        let size = Self.panelSize(for: preferences.visualStyle)
         let screens = screenFrames()
         let fallbackFrame =
             NSScreen.main?.visibleFrame
@@ -166,9 +174,20 @@ public final class DesktopPanelController: NSObject, NSWindowDelegate {
         panel.contentViewController = NSHostingController(
             rootView: DashboardView(
                 coordinator: coordinator,
+                preferences: preferences,
                 actions: actions
             )
         )
+
+        styleObservation = preferences.$visualStyle
+            .sink { [weak self] visualStyle in
+                guard let self, visualStyle != self.visualStyle else { return }
+                self.visualStyle = visualStyle
+                let topEdge = self.panel.frame.maxY
+                DispatchQueue.main.async { [weak self] in
+                    self?.resizePanel(for: visualStyle, preservingTopEdge: topEdge)
+                }
+            }
 
         applyPinnedState(preferences.isPinned, persistOrigin: false)
         if preferences.panelOrigin == nil {
@@ -216,12 +235,33 @@ public final class DesktopPanelController: NSObject, NSWindowDelegate {
         screenChangeScheduler.cancel()
         screenObservation?.invalidate()
         screenObservation = nil
+        styleObservation?.cancel()
+        styleObservation = nil
         panel.orderOut(nil)
         panel.close()
     }
 
     public func windowDidMove(_ notification: Notification) {
         persistOrigin()
+    }
+
+    private func resizePanel(
+        for visualStyle: QuotaVisualStyle,
+        preservingTopEdge topEdge: CGFloat?
+    ) {
+        let size = Self.panelSize(for: visualStyle)
+        let proposedOrigin = CGPoint(
+            x: panel.frame.minX,
+            y: (topEdge ?? panel.frame.maxY) - size.height
+        )
+        let origin = PanelPlacement.clampedOrigin(
+            proposedOrigin,
+            panelSize: size,
+            screenFrames: screenFrames()
+        )
+        preferredOrigin = origin
+        preferences.panelOrigin = origin
+        panel.setFrame(CGRect(origin: origin, size: size), display: true)
     }
 
     @_spi(Testing)

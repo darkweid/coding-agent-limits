@@ -1,7 +1,10 @@
+import QuotaOrbitsCore
 import SwiftUI
 
 struct CodexQuotaCard: View {
     let quota: CodexCardPresentation
+    let displayMode: QuotaDisplayMode
+    let visualStyle: QuotaVisualStyle
     var fixedNow: Date?
 
     var body: some View {
@@ -41,33 +44,40 @@ struct CodexQuotaCard: View {
             }
             .accessibilityElement(children: .combine)
 
-            QuotaBarView(
-                window: "5 hours",
-                countdown: quota.status.resetCountdown(
-                    window: quota.fiveHour,
-                    now: now
-                ),
-                usedPercent: quota.fiveHour?.usedPercent,
-                dataState: quota.status.barDataState
-            )
-
-            QuotaBarView(
-                window: "7 days",
-                countdown: quota.status.resetCountdown(
-                    window: quota.weekly,
-                    now: now
-                ),
-                usedPercent: quota.weekly?.usedPercent,
-                dataState: quota.status.barDataState
-            )
+            Group {
+                if visualStyle == .orbits {
+                    HStack(spacing: 6) {
+                        quotaGauge(window: "5 hours", quotaWindow: quota.fiveHour, now: now)
+                        quotaGauge(window: "7 days", quotaWindow: quota.weekly, now: now)
+                    }
+                } else {
+                    quotaGauge(window: "5 hours", quotaWindow: quota.fiveHour, now: now)
+                    quotaGauge(window: "7 days", quotaWindow: quota.weekly, now: now)
+                }
+            }
 
             statusLine(now: now)
         }
         .padding(9)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(maxWidth: .infinity)
         .background(
             RoundedRectangle(cornerRadius: 17, style: .continuous)
                 .fill(Color.white.opacity(0.055))
+        )
+    }
+
+    private func quotaGauge(
+        window: String,
+        quotaWindow: QuotaWindow?,
+        now: Date
+    ) -> some View {
+        QuotaGaugeView(
+            window: window,
+            countdown: quota.status.resetCountdown(window: quotaWindow, now: now),
+            usedPercent: quotaWindow?.usedPercent,
+            dataState: quota.status.barDataState,
+            displayMode: displayMode,
+            visualStyle: visualStyle
         )
     }
 
