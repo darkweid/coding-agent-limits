@@ -1,6 +1,33 @@
 import QuotaOrbitsCore
 import SwiftUI
 
+@_spi(Testing)
+public enum DashboardLayout {
+    public static let panelWidth: CGFloat = 350
+    public static let panelHeight: CGFloat = 406
+    public static let padding: CGFloat = 12
+    public static let sectionSpacing: CGFloat = 8
+    public static let headerHeight: CGFloat = 12
+    public static let claudeSectionHeight: CGFloat = 250
+    public static let claudeAccountSpacing: CGFloat = 8
+    public static let baseClaudeAccountHeight: CGFloat = 105
+    public static let scopedQuotaRowHeight: CGFloat = 32
+    public static let codexCardHeight: CGFloat = 104
+
+    public static func claudeAccountHeight(scopedCount: Int) -> CGFloat {
+        baseClaudeAccountHeight + CGFloat(min(max(scopedCount, 0), 1)) * scopedQuotaRowHeight
+    }
+
+    public static func requiredClaudeSectionHeight(scopedCounts: [Int]) -> CGFloat {
+        let cards = scopedCounts.map(claudeAccountHeight(scopedCount:)).reduce(0, +)
+        let gaps = CGFloat(max(scopedCounts.count - 1, 0)) * claudeAccountSpacing
+        return cards + gaps
+    }
+
+    public static let totalContentHeight =
+        padding * 2 + headerHeight + claudeSectionHeight + codexCardHeight + sectionSpacing * 2
+}
+
 @MainActor
 public final class DashboardActions: ObservableObject {
     @Published public var isPinned: Bool
@@ -51,7 +78,7 @@ struct DashboardContentView: View {
     var fixedNow: Date?
 
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: DashboardLayout.sectionSpacing) {
             HStack {
                 Spacer()
                 if let date = presentation.lastSuccessfulRefreshAt {
@@ -60,20 +87,27 @@ struct DashboardContentView: View {
                         .foregroundStyle(Color.white.opacity(0.42))
                 }
             }
-            .frame(height: 12)
+            .frame(height: DashboardLayout.headerHeight)
 
-            VStack(spacing: 8) {
-                ForEach(presentation.accounts) { account in
-                    ClaudeAccountCard(account: account, fixedNow: fixedNow)
+            ScrollView(.vertical) {
+                LazyVStack(spacing: DashboardLayout.claudeAccountSpacing) {
+                    ForEach(presentation.accounts) { account in
+                        ClaudeAccountCard(account: account, fixedNow: fixedNow)
+                            .frame(
+                                height: DashboardLayout.claudeAccountHeight(
+                                    scopedCount: account.scoped.count
+                                )
+                            )
+                    }
                 }
             }
-            .frame(height: 216)
+            .frame(height: DashboardLayout.claudeSectionHeight)
 
             CodexQuotaCard(quota: presentation.codex, fixedNow: fixedNow)
-                .frame(height: 104)
+                .frame(height: DashboardLayout.codexCardHeight)
         }
-        .padding(12)
-        .frame(width: 350, height: 372)
+        .padding(DashboardLayout.padding)
+        .frame(width: DashboardLayout.panelWidth, height: DashboardLayout.panelHeight)
         .background(panelBackground)
         .contextMenu {
             let labels = DashboardCopy.contextActions(isPinned: actions.isPinned)
@@ -224,7 +258,9 @@ struct DashboardView_Previews: PreviewProvider {
             preview(snapshot: DashboardPreviewFixtures.longAlias)
                 .previewDisplayName("Long Alias")
         }
-        .previewLayout(.fixed(width: 350, height: 372))
+        .previewLayout(
+            .fixed(width: DashboardLayout.panelWidth, height: DashboardLayout.panelHeight)
+        )
     }
 
     @MainActor

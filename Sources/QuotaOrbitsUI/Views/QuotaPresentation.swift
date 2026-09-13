@@ -56,7 +56,7 @@ public enum DashboardCopy {
 
 @_spi(Testing)
 public enum ProviderHeaderCopy {
-    public static let claudeMark = "✳"
+    public static let claudeMarkAccessibilityLabel = "Claude"
     public static let codexTitle = "codex"
     public static let openAIAccessibilityLabel = "OpenAI"
 
@@ -163,7 +163,7 @@ public struct DashboardPresentation: Equatable {
         values: [ClaudeAccountQuota],
         sourceStaleAt: Date? = nil
     ) -> [AccountCardPresentation] {
-        var result = values.prefix(2).enumerated().map { index, account in
+        var result = values.enumerated().map { index, account in
             AccountCardPresentation(
                 id: "slot-\(index + 1)",
                 alias: safeAlias(account.alias, slot: index),

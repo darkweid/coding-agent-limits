@@ -20,7 +20,10 @@ struct CodexQuotaCard: View {
         VStack(spacing: 5) {
             HStack(spacing: 7) {
                 OpenAIMark()
-                    .frame(width: 16, height: 16)
+                    .frame(
+                        width: ProviderMarkMetrics.canvasSize,
+                        height: ProviderMarkMetrics.canvasSize
+                    )
                     .foregroundStyle(Color.white.opacity(0.72))
                     .accessibilityLabel(ProviderHeaderCopy.openAIAccessibilityLabel)
 

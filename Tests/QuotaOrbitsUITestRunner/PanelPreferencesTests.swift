@@ -216,7 +216,7 @@ enum PanelPreferencesTests {
             try await withAsyncPreferences { preferences, _ in
                 let leftScreen = CGRect(x: 0, y: 0, width: 1_920, height: 1_049)
                 let rightScreen = CGRect(x: 1_920, y: 78, width: 1_920, height: 1_002)
-                let preferredOrigin = CGPoint(x: 3_488, y: 677)
+                let preferredOrigin = CGPoint(x: 3_488, y: 650)
                 let screenFrames = MutableScreenFrames([leftScreen, rightScreen])
                 let notificationCenter = NotificationCenter()
                 let scheduler = ManualPanelScreenChangeScheduler()
@@ -310,7 +310,7 @@ enum PanelPreferencesTests {
             try await withAsyncPreferences { preferences, _ in
                 let leftScreen = CGRect(x: 0, y: 0, width: 1_920, height: 1_049)
                 let rightScreen = CGRect(x: 1_920, y: 78, width: 1_920, height: 1_002)
-                let preferredOrigin = CGPoint(x: 3_488, y: 677)
+                let preferredOrigin = CGPoint(x: 3_488, y: 650)
                 let screenFrames = MutableScreenFrames([leftScreen])
                 let notificationCenter = NotificationCenter()
                 let scheduler = ManualPanelScreenChangeScheduler()

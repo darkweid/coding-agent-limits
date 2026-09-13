@@ -17,10 +17,13 @@ struct ClaudeAccountCard: View {
     }
 
     private func content(now: Date) -> some View {
-        VStack(spacing: 5) {
+        VStack(spacing: 4) {
             HStack(spacing: 6) {
-                Text(ProviderHeaderCopy.claudeMark)
-                    .font(.system(size: 16, weight: .medium))
+                ClaudeMark()
+                    .frame(
+                        width: ProviderMarkMetrics.canvasSize,
+                        height: ProviderMarkMetrics.canvasSize
+                    )
                     .foregroundStyle(Color(red: 0.85, green: 0.43, blue: 0.29))
                     .accessibilityHidden(true)
                 Text(account.alias)

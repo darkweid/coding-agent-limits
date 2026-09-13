@@ -40,7 +40,7 @@ enum QuotaPresentationTests {
             )
         },
         TestCase(name: "QuotaPresentationTests.testProviderHeadersUseBrandMarksAndStableNames") {
-            try TestSupport.assertEqual(ProviderHeaderCopy.claudeMark, "✳")
+            try TestSupport.assertEqual(ProviderHeaderCopy.claudeMarkAccessibilityLabel, "Claude")
             try TestSupport.assertEqual(ProviderHeaderCopy.codexTitle, "codex")
             try TestSupport.assertEqual(ProviderHeaderCopy.openAIAccessibilityLabel, "OpenAI")
             try TestSupport.assertEqual(
@@ -50,6 +50,31 @@ enum QuotaPresentationTests {
             try TestSupport.assertEqual(
                 ProviderHeaderCopy.claudeAccessibilityLabel(alias: "pro", isActive: false),
                 "Claude pro"
+            )
+        },
+        TestCase(name: "QuotaPresentationTests.testProviderMarksHaveMatchingVisibleSize") {
+            try TestSupport.assertEqual(ProviderMarkMetrics.claudeVisibleDiameter, 15)
+            try TestSupport.assertEqual(ProviderMarkMetrics.openAIVisibleDiameter, 15)
+            try TestSupport.assertEqual(ProviderMarkMetrics.openAILobeHeight, 10)
+            try TestSupport.assertEqual(ProviderMarkMetrics.openAILobeOffset, 2.5)
+            try TestSupport.assertEqual(ProviderMarkMetrics.openAIOuterRadius, 7.5)
+        },
+        TestCase(name: "QuotaPresentationTests.testDashboardFitsOneScopedClaudeCardWithoutOverlap")
+        {
+            let panelHeight = await MainActor.run { DesktopPanelController.panelSize.height }
+
+            try TestSupport.assertEqual(
+                DashboardLayout.requiredClaudeSectionHeight(scopedCounts: [1, 0]),
+                250
+            )
+            try TestSupport.assertTrue(
+                DashboardLayout.claudeSectionHeight
+                    >= DashboardLayout.requiredClaudeSectionHeight(scopedCounts: [1, 0])
+            )
+            try TestSupport.assertEqual(DashboardLayout.totalContentHeight, 406)
+            try TestSupport.assertEqual(
+                panelHeight,
+                DashboardLayout.panelHeight
             )
         },
         TestCase(
@@ -131,6 +156,32 @@ enum QuotaPresentationTests {
             try TestSupport.assertEqual(presentation.codex.fiveHour?.remainingPercent, 25)
             try TestSupport.assertEqual(presentation.codex.weekly?.remainingPercent, 50)
             try TestSupport.assertEqual(presentation.lastSuccessfulRefreshAt, now)
+        },
+        TestCase(name: "QuotaPresentationTests.testDashboardProjectionKeepsAllAccountsForScrolling")
+        {
+            let accounts = [
+                account(id: "one", alias: "max", active: true, inner: 80, outer: 70),
+                account(id: "two", alias: "pro", active: false, inner: 60, outer: 50),
+                account(id: "three", alias: "lab", active: false, inner: 40, outer: 30),
+                account(id: "four", alias: "spare", active: false, inner: 20, outer: 10),
+            ]
+
+            let presentation = DashboardPresentation(
+                snapshot: QuotaSnapshot(
+                    claude: .available(accounts, updatedAt: now),
+                    codex: .unavailable(message: "unavailable")
+                )
+            )
+
+            try TestSupport.assertEqual(presentation.accounts.count, 4)
+            try TestSupport.assertEqual(
+                presentation.accounts.map(\.alias),
+                ["max", "pro", "lab", "spare"]
+            )
+            try TestSupport.assertTrue(
+                DashboardLayout.requiredClaudeSectionHeight(scopedCounts: [0, 0, 0, 0])
+                    > DashboardLayout.claudeSectionHeight
+            )
         },
         TestCase(name: "QuotaPresentationTests.testUnavailableProjectionUsesNeutralPlaceholders") {
             let presentation = DashboardPresentation(

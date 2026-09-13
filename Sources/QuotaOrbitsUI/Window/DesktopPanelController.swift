@@ -79,7 +79,10 @@ private final class DelayedPanelScreenChangeScheduler: PanelScreenChangeScheduli
 
 @MainActor
 public final class DesktopPanelController: NSObject, NSWindowDelegate {
-    public static let panelSize = CGSize(width: 350, height: 372)
+    public static let panelSize = CGSize(
+        width: DashboardLayout.panelWidth,
+        height: DashboardLayout.panelHeight
+    )
 
     private let preferences: PanelPreferences
     private let actions: DashboardActions
