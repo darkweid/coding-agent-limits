@@ -50,3 +50,7 @@ ln -s "$HOME/Applications/Coding Agent Limits.app" "$HOME/Desktop/Coding Agent L
 ```
 
 Coding Agent Limits reads usage data locally from your existing Claude Code or `cswap` and Codex CLI sessions.
+
+## License
+
+[MIT](LICENSE)
