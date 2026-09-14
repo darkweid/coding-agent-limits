@@ -82,10 +82,16 @@ private final class DelayedPanelScreenChangeScheduler: PanelScreenChangeScheduli
 public final class DesktopPanelController: NSObject, NSWindowDelegate {
     public static let panelSize = panelSize(for: .bars)
 
-    public static func panelSize(for visualStyle: QuotaVisualStyle) -> CGSize {
+    public static func panelSize(
+        for visualStyle: QuotaVisualStyle,
+        claudeSourceMode: ClaudeSourceMode = .cswap
+    ) -> CGSize {
         CGSize(
             width: DashboardLayout.panelWidth,
-            height: DashboardLayout.panelHeight(for: visualStyle)
+            height: DashboardLayout.panelHeight(
+                for: visualStyle,
+                claudeSourceMode: claudeSourceMode
+            )
         )
     }
 
@@ -95,8 +101,9 @@ public final class DesktopPanelController: NSObject, NSWindowDelegate {
     private let screenFrames: @MainActor () -> [CGRect]
     private let screenChangeScheduler: any PanelScreenChangeScheduling
     private var screenObservation: ScreenObservation?
-    private var styleObservation: AnyCancellable?
+    private var layoutObservation: AnyCancellable?
     private var visualStyle: QuotaVisualStyle
+    private var claudeSourceMode: ClaudeSourceMode
     private var preferredOrigin: CGPoint
     private var isScreenConfigurationChanging = false
     private var isClosed = false
@@ -130,8 +137,12 @@ public final class DesktopPanelController: NSObject, NSWindowDelegate {
         self.screenFrames = screenFrames
         self.screenChangeScheduler = screenChangeScheduler
         visualStyle = preferences.visualStyle
+        claudeSourceMode = preferences.claudeSourceMode
 
-        let size = Self.panelSize(for: preferences.visualStyle)
+        let size = Self.panelSize(
+            for: preferences.visualStyle,
+            claudeSourceMode: preferences.claudeSourceMode
+        )
         let screens = screenFrames()
         let fallbackFrame =
             NSScreen.main?.visibleFrame
@@ -179,13 +190,22 @@ public final class DesktopPanelController: NSObject, NSWindowDelegate {
             )
         )
 
-        styleObservation = preferences.$visualStyle
-            .sink { [weak self] visualStyle in
-                guard let self, visualStyle != self.visualStyle else { return }
+        layoutObservation = preferences.$visualStyle
+            .combineLatest(preferences.$claudeSourceMode)
+            .sink { [weak self] visualStyle, claudeSourceMode in
+                guard let self,
+                    visualStyle != self.visualStyle
+                        || claudeSourceMode != self.claudeSourceMode
+                else { return }
                 self.visualStyle = visualStyle
+                self.claudeSourceMode = claudeSourceMode
                 let topEdge = self.panel.frame.maxY
                 DispatchQueue.main.async { [weak self] in
-                    self?.resizePanel(for: visualStyle, preservingTopEdge: topEdge)
+                    self?.resizePanel(
+                        for: visualStyle,
+                        claudeSourceMode: claudeSourceMode,
+                        preservingTopEdge: topEdge
+                    )
                 }
             }
 
@@ -235,8 +255,8 @@ public final class DesktopPanelController: NSObject, NSWindowDelegate {
         screenChangeScheduler.cancel()
         screenObservation?.invalidate()
         screenObservation = nil
-        styleObservation?.cancel()
-        styleObservation = nil
+        layoutObservation?.cancel()
+        layoutObservation = nil
         panel.orderOut(nil)
         panel.close()
     }
@@ -247,9 +267,13 @@ public final class DesktopPanelController: NSObject, NSWindowDelegate {
 
     private func resizePanel(
         for visualStyle: QuotaVisualStyle,
+        claudeSourceMode: ClaudeSourceMode,
         preservingTopEdge topEdge: CGFloat?
     ) {
-        let size = Self.panelSize(for: visualStyle)
+        let size = Self.panelSize(
+            for: visualStyle,
+            claudeSourceMode: claudeSourceMode
+        )
         let proposedOrigin = CGPoint(
             x: panel.frame.minX,
             y: (topEdge ?? panel.frame.maxY) - size.height

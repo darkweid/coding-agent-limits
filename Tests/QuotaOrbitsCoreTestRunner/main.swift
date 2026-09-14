@@ -6,6 +6,44 @@ let arguments = Array(CommandLine.arguments.dropFirst())
 if arguments == ["--emit-large-payload"] {
     FileHandle.standardOutput.write(Data(repeating: 0x78, count: 1_000_000))
     exit(0)
+} else if arguments == ["--emit-usage-pty"] {
+    print("❯")
+    fflush(stdout)
+    while let line = readLine() {
+        if line == "/usage" {
+            print("Current session")
+            print("9% used")
+            print("Resets 11:59pm (UTC)")
+            print("Current week (all models)")
+            print("20% used")
+            print("Resets Aug 14 at 10:59am (UTC)")
+            print("Esc to exit")
+            fflush(stdout)
+        } else if line == "/exit" {
+            exit(0)
+        }
+    }
+    exit(0)
+} else if arguments == ["--emit-trust-usage-pty"] {
+    print("Workspace trust security")
+    print("❯ Yes, I trust this folder")
+    fflush(stdout)
+    guard readLine() == "\u{1B}[B" else { exit(3) }
+    print("❯")
+    fflush(stdout)
+    while let line = readLine() {
+        if line == "/usage" {
+            print("Current session")
+            print("9% used")
+            print("Current week (all models)")
+            print("20% used")
+            print("Esc to exit")
+            fflush(stdout)
+        } else if line == "/exit" {
+            exit(0)
+        }
+    }
+    exit(0)
 } else if arguments.isEmpty {
     filter = nil
 } else if arguments.count == 2, arguments[0] == "--filter" {
@@ -19,6 +57,8 @@ let allCases =
     QuotaModelsTests.cases
     + QuotaFormattingTests.cases
     + ClaudeQuotaSourceTests.cases
+    + ClaudeUsageTerminalParserTests.cases
+    + ClaudeNativeQuotaSourceTests.cases
     + CodexAppServerClientTests.cases
     + CodexQuotaSourceTests.cases
     + QuotaRefreshCoordinatorTests.cases

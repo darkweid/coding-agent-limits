@@ -15,6 +15,13 @@ public enum QuotaVisualStyle: String, CaseIterable, Identifiable, Sendable {
     public var id: Self { self }
 }
 
+public enum ClaudeSourceMode: String, CaseIterable, Identifiable, Sendable {
+    case cswap
+    case native
+
+    public var id: Self { self }
+}
+
 @MainActor
 public final class PanelPreferences: ObservableObject {
     public static let defaultCswapPath = ExecutablePathResolver.defaultCswapPath(
@@ -24,9 +31,21 @@ public final class PanelPreferences: ObservableObject {
         homeDirectory: FileManager.default.homeDirectoryForCurrentUser,
         isExecutable: FileManager.default.isExecutableFile(atPath:)
     )
+    public static let defaultClaudePath = ExecutablePathResolver.defaultClaudePath(
+        homeDirectory: FileManager.default.homeDirectoryForCurrentUser,
+        isExecutable: FileManager.default.isExecutableFile(atPath:)
+    )
+
+    @Published public var claudeSourceMode: ClaudeSourceMode {
+        didSet { defaults.set(claudeSourceMode.rawValue, forKey: Keys.claudeSourceMode) }
+    }
 
     @Published public var cswapPath: String {
         didSet { defaults.set(cswapPath, forKey: Keys.cswapPath) }
+    }
+
+    @Published public var claudePath: String {
+        didSet { defaults.set(claudePath, forKey: Keys.claudePath) }
     }
 
     @Published public var codexPath: String {
@@ -69,7 +88,9 @@ public final class PanelPreferences: ObservableObject {
     }
 
     private enum Keys {
+        static let claudeSourceMode = "quotaOrbits.claudeSourceMode"
         static let cswapPath = "quotaOrbits.cswapPath"
+        static let claudePath = "quotaOrbits.claudePath"
         static let codexPath = "quotaOrbits.codexPath"
         static let refreshIntervalSeconds = "quotaOrbits.refreshIntervalSeconds"
         static let displayMode = "quotaOrbits.displayMode"
@@ -83,9 +104,15 @@ public final class PanelPreferences: ObservableObject {
 
     public init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
+        claudeSourceMode =
+            defaults.string(forKey: Keys.claudeSourceMode)
+            .flatMap(ClaudeSourceMode.init(rawValue:)) ?? .cswap
         cswapPath =
             defaults.string(forKey: Keys.cswapPath)
             ?? Self.defaultCswapPath
+        claudePath =
+            defaults.string(forKey: Keys.claudePath)
+            ?? Self.defaultClaudePath
         codexPath =
             defaults.string(forKey: Keys.codexPath)
             ?? Self.defaultCodexPath

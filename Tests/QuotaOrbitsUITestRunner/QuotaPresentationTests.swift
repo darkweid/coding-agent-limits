@@ -56,6 +56,10 @@ enum QuotaPresentationTests {
             try TestSupport.assertEqual(SettingsPresentation.refreshLabel(seconds: 60), "1 min")
             try TestSupport.assertEqual(SettingsPresentation.refreshLabel(seconds: 150), "2m 30s")
         },
+        TestCase(name: "SettingsViewTests.testClaudeSourceSelectsMatchingExecutablePath") {
+            try TestSupport.assertEqual(SettingsPresentation.pathKind(for: .cswap), .cswap)
+            try TestSupport.assertEqual(SettingsPresentation.pathKind(for: .native), .claude)
+        },
         TestCase(name: "QuotaPresentationTests.testContextActionsUseNeutralApprovedCopy") {
             try TestSupport.assertEqual(
                 DashboardCopy.contextActions(isPinned: true),
@@ -77,6 +81,14 @@ enum QuotaPresentationTests {
             try TestSupport.assertEqual(
                 ProviderHeaderCopy.claudeAccessibilityLabel(alias: "pro", isActive: false),
                 "Claude pro"
+            )
+            try TestSupport.assertEqual(
+                ProviderHeaderCopy.codexAccessibilityLabel(isActive: true),
+                "Codex, active account"
+            )
+            try TestSupport.assertEqual(
+                ProviderHeaderCopy.codexAccessibilityLabel(isActive: false),
+                "Codex"
             )
         },
         TestCase(name: "QuotaPresentationTests.testProviderMarksHaveMatchingVisibleSize") {
@@ -202,6 +214,7 @@ enum QuotaPresentationTests {
             try TestSupport.assertEqual(presentation.accounts[1].scoped, [])
             try TestSupport.assertEqual(presentation.codex.fiveHour?.remainingPercent, 25)
             try TestSupport.assertEqual(presentation.codex.weekly?.remainingPercent, 50)
+            try TestSupport.assertTrue(presentation.codex.isActive)
             try TestSupport.assertEqual(presentation.lastSuccessfulRefreshAt, now)
         },
         TestCase(name: "QuotaPresentationTests.testDashboardProjectionKeepsAllAccountsForScrolling")
@@ -248,7 +261,27 @@ enum QuotaPresentationTests {
                 "no data"
             )
             try TestSupport.assertEqual(presentation.codex.status.text(now: now), "no data")
+            try TestSupport.assertFalse(presentation.codex.isActive)
             try TestSupport.assertEqual(presentation.lastSuccessfulRefreshAt, nil)
+        },
+        TestCase(name: "QuotaPresentationTests.testNativeClaudeUsesOneAccountSlot") {
+            let presentation = DashboardPresentation(
+                snapshot: QuotaSnapshot(
+                    claude: .unavailable(message: "unavailable"),
+                    codex: .unavailable(message: "unavailable")
+                ),
+                claudeSourceMode: .native
+            )
+
+            try TestSupport.assertEqual(presentation.accounts.map(\.alias), ["01"])
+            try TestSupport.assertEqual(
+                DashboardLayout.panelHeight(for: .bars, claudeSourceMode: .native),
+                293
+            )
+            try TestSupport.assertEqual(
+                DashboardLayout.panelHeight(for: .orbits, claudeSourceMode: .native),
+                332
+            )
         },
         TestCase(name: "QuotaPresentationTests.testAvailableSourcePreservesPerAccountFreshness") {
             let cachedAt = now.addingTimeInterval(-300)

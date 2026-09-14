@@ -36,10 +36,10 @@ final class AppRuntime {
         center: NSWorkspace.shared.notificationCenter
     )
     private var manualRefreshTask: Task<Void, Never>?
-    private var cswapPathTask: Task<Void, Never>?
+    private var claudeConfigurationTask: Task<Void, Never>?
     private var codexPathTask: Task<Void, Never>?
     private var lifecycleGeneration = 0
-    private var cswapPathGeneration = 0
+    private var claudeConfigurationGeneration = 0
     private var codexPathGeneration = 0
     private var isAwake = true
     private var isStarted = false
@@ -49,8 +49,10 @@ final class AppRuntime {
         self.preferences = preferences
 
         let claudeSource = ReplaceableClaudeQuotaSource(
-            source: ClaudeQuotaSource(
-                executable: URL(fileURLWithPath: preferences.cswapPath)
+            source: Self.makeClaudeSource(
+                mode: preferences.claudeSourceMode,
+                cswapPath: preferences.cswapPath,
+                claudePath: preferences.claudePath
             )
         )
         self.claudeSource = claudeSource
@@ -99,25 +101,21 @@ final class AppRuntime {
     func updateCswapPath(_ path: String) {
         guard !isShuttingDown, path != preferences.cswapPath else { return }
         preferences.cswapPath = path
-        cswapPathGeneration += 1
-        let generation = cswapPathGeneration
-        cswapPathTask?.cancel()
-        guard isAwake else { return }
-        let source = claudeSource
+        guard preferences.claudeSourceMode == .cswap else { return }
+        reconfigureClaudeSource()
+    }
 
-        cswapPathTask = Task { [weak self] in
-            await source.replace(
-                with: ClaudeQuotaSource(
-                    executable: URL(fileURLWithPath: path)
-                ),
-                generation: generation
-            )
-            guard let self, !Task.isCancelled else { return }
-            await refreshAfterReconfiguration()
-            if generation == cswapPathGeneration {
-                cswapPathTask = nil
-            }
-        }
+    func updateClaudePath(_ path: String) {
+        guard !isShuttingDown, path != preferences.claudePath else { return }
+        preferences.claudePath = path
+        guard preferences.claudeSourceMode == .native else { return }
+        reconfigureClaudeSource()
+    }
+
+    func updateClaudeSourceMode(_ mode: ClaudeSourceMode) {
+        guard !isShuttingDown, mode != preferences.claudeSourceMode else { return }
+        preferences.claudeSourceMode = mode
+        reconfigureClaudeSource()
     }
 
     func updateCodexPath(_ path: String) {
@@ -230,33 +228,70 @@ final class AppRuntime {
         await coordinator.refreshNow()
     }
 
+    private func reconfigureClaudeSource() {
+        claudeConfigurationGeneration += 1
+        let generation = claudeConfigurationGeneration
+        claudeConfigurationTask?.cancel()
+        guard isAwake else { return }
+        let source = claudeSource
+        let replacement = Self.makeClaudeSource(
+            mode: preferences.claudeSourceMode,
+            cswapPath: preferences.cswapPath,
+            claudePath: preferences.claudePath
+        )
+
+        claudeConfigurationTask = Task { [weak self] in
+            await source.replace(with: replacement, generation: generation)
+            guard let self, !Task.isCancelled else { return }
+            await refreshAfterReconfiguration()
+            if generation == claudeConfigurationGeneration {
+                claudeConfigurationTask = nil
+            }
+        }
+    }
+
+    private static func makeClaudeSource(
+        mode: ClaudeSourceMode,
+        cswapPath: String,
+        claudePath: String
+    ) -> any ClaudeQuotaFetching {
+        switch mode {
+        case .cswap:
+            ClaudeQuotaSource(executable: URL(fileURLWithPath: cswapPath))
+        case .native:
+            ClaudeNativeQuotaSource(executable: URL(fileURLWithPath: claudePath))
+        }
+    }
+
     private func waitForCoordinatorToStop() async {
         await coordinator.waitUntilIdle()
     }
 
     private func cancelRefreshOwningTasks() async {
         let pendingManualRefresh = manualRefreshTask
-        let pendingCswapPath = cswapPathTask
+        let pendingClaudeConfiguration = claudeConfigurationTask
         let pendingCodexPath = codexPathTask
         pendingManualRefresh?.cancel()
-        pendingCswapPath?.cancel()
+        pendingClaudeConfiguration?.cancel()
         pendingCodexPath?.cancel()
         await pendingManualRefresh?.value
-        await pendingCswapPath?.value
+        await pendingClaudeConfiguration?.value
         await pendingCodexPath?.value
         self.manualRefreshTask = nil
-        self.cswapPathTask = nil
+        self.claudeConfigurationTask = nil
         self.codexPathTask = nil
     }
 
     private func reinstallPersistedSources() async {
-        cswapPathGeneration += 1
-        let cswapGeneration = cswapPathGeneration
+        claudeConfigurationGeneration += 1
+        let claudeGeneration = claudeConfigurationGeneration
         await claudeSource.replace(
-            with: ClaudeQuotaSource(
-                executable: URL(fileURLWithPath: preferences.cswapPath)
+            with: Self.makeClaudeSource(
+                mode: preferences.claudeSourceMode,
+                cswapPath: preferences.cswapPath,
+                claudePath: preferences.claudePath
             ),
-            generation: cswapGeneration
+            generation: claudeGeneration
         )
 
         codexPathGeneration += 1

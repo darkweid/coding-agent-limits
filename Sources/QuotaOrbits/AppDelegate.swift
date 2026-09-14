@@ -18,12 +18,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     var settingsView: some View {
         SettingsView(
             preferences: preferences,
+            claudeSourceMode: Binding(
+                get: { [weak self] in self?.preferences.claudeSourceMode ?? .cswap },
+                set: { [weak self] in self?.setClaudeSourceMode($0) }
+            ),
             cswapPath: Binding(
                 get: { [weak self] in
                     self?.preferences.cswapPath
                         ?? PanelPreferences.defaultCswapPath
                 },
                 set: { [weak self] in self?.setCswapPath($0) }
+            ),
+            claudePath: Binding(
+                get: { [weak self] in
+                    self?.preferences.claudePath
+                        ?? PanelPreferences.defaultClaudePath
+                },
+                set: { [weak self] in self?.setClaudePath($0) }
             ),
             codexPath: Binding(
                 get: { [weak self] in
@@ -116,6 +127,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             runtime.updateCswapPath(path)
         } else {
             preferences.cswapPath = path
+        }
+    }
+
+    private func setClaudePath(_ path: String) {
+        if let runtime {
+            runtime.updateClaudePath(path)
+        } else {
+            preferences.claudePath = path
+        }
+    }
+
+    private func setClaudeSourceMode(_ mode: ClaudeSourceMode) {
+        if let runtime {
+            runtime.updateClaudeSourceMode(mode)
+        } else {
+            preferences.claudeSourceMode = mode
         }
     }
 

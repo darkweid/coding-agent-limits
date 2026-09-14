@@ -90,7 +90,7 @@ public actor CodexAppServerClient {
             params: [
                 "clientInfo": [
                     "name": "quota_orbits",
-                    "title": "Quota Orbits",
+                    "title": "Coding Agent Limits",
                     "version": "0.1.0",
                 ]
             ],

@@ -18,6 +18,18 @@ public enum LaunchAtLoginNotice: Equatable, Sendable {
 
 @_spi(Testing)
 public enum SettingsPresentation {
+    public enum PathKind: Equatable, Sendable {
+        case cswap
+        case claude
+    }
+
+    public static func pathKind(for sourceMode: ClaudeSourceMode) -> PathKind {
+        switch sourceMode {
+        case .cswap: .cswap
+        case .native: .claude
+        }
+    }
+
     public static func refreshLabel(seconds: Int) -> String {
         if seconds < 60 { return "\(seconds) sec" }
         let minutes = seconds / 60
@@ -28,7 +40,9 @@ public enum SettingsPresentation {
 
 public struct SettingsView: View {
     @ObservedObject private var preferences: PanelPreferences
+    @Binding private var claudeSourceMode: ClaudeSourceMode
     @Binding private var cswapPath: String
+    @Binding private var claudePath: String
     @Binding private var codexPath: String
     @Binding private var refreshIntervalSeconds: Int
     @Binding private var displayMode: QuotaDisplayMode
@@ -38,7 +52,9 @@ public struct SettingsView: View {
 
     public init(
         preferences: PanelPreferences,
+        claudeSourceMode: Binding<ClaudeSourceMode>,
         cswapPath: Binding<String>,
+        claudePath: Binding<String>,
         codexPath: Binding<String>,
         refreshIntervalSeconds: Binding<Int>,
         displayMode: Binding<QuotaDisplayMode>,
@@ -47,7 +63,9 @@ public struct SettingsView: View {
         launchAtLoginNotice: Binding<LaunchAtLoginNotice?> = .constant(nil)
     ) {
         self.preferences = preferences
+        _claudeSourceMode = claudeSourceMode
         _cswapPath = cswapPath
+        _claudePath = claudePath
         _codexPath = codexPath
         _refreshIntervalSeconds = refreshIntervalSeconds
         _displayMode = displayMode
@@ -59,8 +77,20 @@ public struct SettingsView: View {
     public var body: some View {
         Form {
             Section("Sources") {
-                TextField("cswap executable", text: $cswapPath)
-                    .textFieldStyle(.roundedBorder)
+                Picker("Claude source", selection: $claudeSourceMode) {
+                    Text("cswap").tag(ClaudeSourceMode.cswap)
+                    Text("Native Claude").tag(ClaudeSourceMode.native)
+                }
+                .pickerStyle(.segmented)
+
+                switch SettingsPresentation.pathKind(for: claudeSourceMode) {
+                case .cswap:
+                    TextField("cswap executable", text: $cswapPath)
+                        .textFieldStyle(.roundedBorder)
+                case .claude:
+                    TextField("Claude executable", text: $claudePath)
+                        .textFieldStyle(.roundedBorder)
+                }
                 TextField("Codex executable", text: $codexPath)
                     .textFieldStyle(.roundedBorder)
             }
@@ -107,6 +137,6 @@ public struct SettingsView: View {
         }
         .formStyle(.grouped)
         .padding(16)
-        .frame(width: 460, height: 440)
+        .frame(width: 460, height: 480)
     }
 }

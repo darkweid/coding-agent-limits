@@ -85,6 +85,10 @@ public enum ProviderHeaderCopy {
         let identity = "Claude \(alias)"
         return isActive ? "\(identity), active account" : identity
     }
+
+    public static func codexAccessibilityLabel(isActive: Bool) -> String {
+        isActive ? "Codex, active account" : "Codex"
+    }
 }
 
 @_spi(Testing)
@@ -142,6 +146,7 @@ public struct AccountCardPresentation: Identifiable, Equatable {
 
 @_spi(Testing)
 public struct CodexCardPresentation: Equatable {
+    public let isActive: Bool
     public let fiveHour: QuotaWindow?
     public let weekly: QuotaWindow?
     public let creditsBalance: Decimal?
@@ -154,8 +159,15 @@ public struct DashboardPresentation: Equatable {
     public let codex: CodexCardPresentation
     public let lastSuccessfulRefreshAt: Date?
 
-    public init(snapshot: QuotaSnapshot) {
-        accounts = Self.accounts(from: snapshot.claude)
+    public init(
+        snapshot: QuotaSnapshot,
+        claudeSourceMode: ClaudeSourceMode = .cswap
+    ) {
+        let minimumClaudeSlots = claudeSourceMode == .native ? 1 : 2
+        accounts = Self.accounts(
+            from: snapshot.claude,
+            minimumSlots: minimumClaudeSlots
+        )
         codex = Self.codex(from: snapshot.codex)
         lastSuccessfulRefreshAt = [
             Self.successDate(from: snapshot.claude),
@@ -166,22 +178,28 @@ public struct DashboardPresentation: Equatable {
     }
 
     private static func accounts(
-        from source: SourceSnapshot<[ClaudeAccountQuota]>
+        from source: SourceSnapshot<[ClaudeAccountQuota]>,
+        minimumSlots: Int
     ) -> [AccountCardPresentation] {
         switch source {
         case let .available(values, _):
-            return accountCards(values: values)
+            return accountCards(values: values, minimumSlots: minimumSlots)
         case let .stale(values, lastSuccessAt, _):
-            return accountCards(values: values, sourceStaleAt: lastSuccessAt)
+            return accountCards(
+                values: values,
+                minimumSlots: minimumSlots,
+                sourceStaleAt: lastSuccessAt
+            )
         case .loading:
-            return placeholderAccounts(status: .loading)
+            return placeholderAccounts(count: minimumSlots, status: .loading)
         case .unavailable:
-            return placeholderAccounts(status: .unavailable)
+            return placeholderAccounts(count: minimumSlots, status: .unavailable)
         }
     }
 
     private static func accountCards(
         values: [ClaudeAccountQuota],
+        minimumSlots: Int,
         sourceStaleAt: Date? = nil
     ) -> [AccountCardPresentation] {
         var result = values.enumerated().map { index, account in
@@ -195,7 +213,7 @@ public struct DashboardPresentation: Equatable {
                 status: accountStatus(account.state, sourceStaleAt: sourceStaleAt)
             )
         }
-        while result.count < 2 {
+        while result.count < minimumSlots {
             let slot = result.count
             result.append(placeholderAccount(slot: slot))
         }
@@ -221,12 +239,10 @@ public struct DashboardPresentation: Equatable {
     }
 
     private static func placeholderAccounts(
+        count: Int,
         status: PresentationStatus
     ) -> [AccountCardPresentation] {
-        [
-            placeholderAccount(slot: 0, status: status),
-            placeholderAccount(slot: 1, status: status),
-        ]
+        (0..<count).map { placeholderAccount(slot: $0, status: status) }
     }
 
     private static func placeholderAccount(
@@ -282,6 +298,7 @@ public struct DashboardPresentation: Equatable {
         switch source {
         case let .available(value, _):
             CodexCardPresentation(
+                isActive: true,
                 fiveHour: value.fiveHour,
                 weekly: value.weekly,
                 creditsBalance: value.creditsBalance,
@@ -289,6 +306,7 @@ public struct DashboardPresentation: Equatable {
             )
         case let .stale(value, lastSuccessAt, _):
             CodexCardPresentation(
+                isActive: true,
                 fiveHour: value.fiveHour,
                 weekly: value.weekly,
                 creditsBalance: value.creditsBalance,
@@ -296,6 +314,7 @@ public struct DashboardPresentation: Equatable {
             )
         case .loading:
             CodexCardPresentation(
+                isActive: false,
                 fiveHour: nil,
                 weekly: nil,
                 creditsBalance: nil,
@@ -303,6 +322,7 @@ public struct DashboardPresentation: Equatable {
             )
         case .unavailable:
             CodexCardPresentation(
+                isActive: false,
                 fiveHour: nil,
                 weekly: nil,
                 creditsBalance: nil,

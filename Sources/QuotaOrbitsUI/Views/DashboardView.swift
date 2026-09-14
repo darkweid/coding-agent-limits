@@ -11,6 +11,8 @@ public enum DashboardLayout {
     public static let headerHeight: CGFloat = 12
     public static let barClaudeSectionHeight: CGFloat = 250
     public static let orbitClaudeSectionHeight: CGFloat = 288
+    public static let nativeBarClaudeSectionHeight: CGFloat = 137
+    public static let nativeOrbitClaudeSectionHeight: CGFloat = 140
     public static let claudeAccountSpacing: CGFloat = 8
     public static let baseClaudeAccountHeight: CGFloat = 105
     public static let scopedQuotaRowHeight: CGFloat = 32
@@ -49,22 +51,47 @@ public enum DashboardLayout {
         }
     }
 
-    public static func panelHeight(for visualStyle: QuotaVisualStyle) -> CGFloat {
-        switch visualStyle {
+    public static func panelHeight(
+        for visualStyle: QuotaVisualStyle,
+        claudeSourceMode: ClaudeSourceMode = .cswap
+    ) -> CGFloat {
+        if claudeSourceMode == .native {
+            return totalContentHeight(
+                for: visualStyle,
+                claudeSourceMode: claudeSourceMode
+            )
+        }
+        return switch visualStyle {
         case .bars: barPanelHeight
         case .orbits: orbitPanelHeight
         }
     }
 
-    public static func claudeSectionHeight(for visualStyle: QuotaVisualStyle) -> CGFloat {
-        switch visualStyle {
+    public static func claudeSectionHeight(
+        for visualStyle: QuotaVisualStyle,
+        claudeSourceMode: ClaudeSourceMode = .cswap
+    ) -> CGFloat {
+        if claudeSourceMode == .native {
+            return switch visualStyle {
+            case .bars: nativeBarClaudeSectionHeight
+            case .orbits: nativeOrbitClaudeSectionHeight
+            }
+        }
+        return switch visualStyle {
         case .bars: barClaudeSectionHeight
         case .orbits: orbitClaudeSectionHeight
         }
     }
 
-    public static func totalContentHeight(for visualStyle: QuotaVisualStyle) -> CGFloat {
-        padding * 2 + headerHeight + claudeSectionHeight(for: visualStyle)
+    public static func totalContentHeight(
+        for visualStyle: QuotaVisualStyle,
+        claudeSourceMode: ClaudeSourceMode = .cswap
+    ) -> CGFloat {
+        padding * 2 + headerHeight
+            + claudeSectionHeight(
+                for: visualStyle,
+                claudeSourceMode: claudeSourceMode
+            )
             + minimumCodexCardHeight(visualStyle: visualStyle) + sectionSpacing * 2
     }
 }
@@ -110,9 +137,13 @@ public struct DashboardView: View {
 
     public var body: some View {
         DashboardContentView(
-            presentation: DashboardPresentation(snapshot: coordinator.snapshot),
+            presentation: DashboardPresentation(
+                snapshot: coordinator.snapshot,
+                claudeSourceMode: preferences.claudeSourceMode
+            ),
             displayMode: preferences.displayMode,
             visualStyle: preferences.visualStyle,
+            claudeSourceMode: preferences.claudeSourceMode,
             actions: actions
         )
     }
@@ -122,6 +153,7 @@ struct DashboardContentView: View {
     let presentation: DashboardPresentation
     let displayMode: QuotaDisplayMode
     let visualStyle: QuotaVisualStyle
+    let claudeSourceMode: ClaudeSourceMode
     @ObservedObject var actions: DashboardActions
     var fixedNow: Date?
 
@@ -156,7 +188,12 @@ struct DashboardContentView: View {
                     }
                 }
             }
-            .frame(height: DashboardLayout.claudeSectionHeight(for: visualStyle))
+            .frame(
+                height: DashboardLayout.claudeSectionHeight(
+                    for: visualStyle,
+                    claudeSourceMode: claudeSourceMode
+                )
+            )
 
             CodexQuotaCard(
                 quota: presentation.codex,
@@ -172,7 +209,10 @@ struct DashboardContentView: View {
         .padding(DashboardLayout.padding)
         .frame(
             width: DashboardLayout.panelWidth,
-            height: DashboardLayout.panelHeight(for: visualStyle)
+            height: DashboardLayout.panelHeight(
+                for: visualStyle,
+                claudeSourceMode: claudeSourceMode
+            )
         )
         .background(panelBackground)
         .contextMenu {
@@ -338,6 +378,7 @@ struct DashboardView_Previews: PreviewProvider {
             presentation: DashboardPresentation(snapshot: snapshot),
             displayMode: .used,
             visualStyle: .bars,
+            claudeSourceMode: .cswap,
             actions: DashboardActions(
                 isPinned: true,
                 refreshNow: {},

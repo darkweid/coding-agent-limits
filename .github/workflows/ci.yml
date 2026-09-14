@@ -48,8 +48,8 @@ jobs:
           set -euo pipefail
           plutil -lint Packaging/Info.plist
           bash scripts/build-app.sh
-          codesign --verify --deep --strict ".build/Quota Orbits.app"
-          identifier="$(plutil -extract CFBundleIdentifier raw ".build/Quota Orbits.app/Contents/Info.plist")"
+          codesign --verify --deep --strict ".build/Coding Agent Limits.app"
+          identifier="$(plutil -extract CFBundleIdentifier raw ".build/Coding Agent Limits.app/Contents/Info.plist")"
           [[ "$identifier" == "io.github.darkweid.coding-agent-limits" ]]
 
   shell:

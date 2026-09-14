@@ -3,7 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-APP_BUNDLE="$REPO_ROOT/.build/Quota Orbits.app"
+APP_BUNDLE="$REPO_ROOT/.build/Coding Agent Limits.app"
 
 cd "$REPO_ROOT"
 swift build -c release --product QuotaOrbits
@@ -21,6 +21,7 @@ rm -rf "$APP_BUNDLE"
 mkdir -p "$APP_BUNDLE/Contents/MacOS" "$APP_BUNDLE/Contents/Resources"
 ditto "$BIN_DIR/QuotaOrbits" "$APP_BUNDLE/Contents/MacOS/QuotaOrbits"
 ditto "$REPO_ROOT/Packaging/Info.plist" "$APP_BUNDLE/Contents/Info.plist"
+ditto "$REPO_ROOT/Packaging/AppIcon.icns" "$APP_BUNDLE/Contents/Resources/AppIcon.icns"
 codesign --force --deep --sign - "$APP_BUNDLE"
 
 echo "$APP_BUNDLE"

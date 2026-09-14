@@ -3,9 +3,9 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-BUILT_APP="$REPO_ROOT/.build/Quota Orbits.app"
+BUILT_APP="$REPO_ROOT/.build/Coding Agent Limits.app"
 INSTALL_DIR="${HOME}/Applications"
-INSTALLED_APP="$INSTALL_DIR/Quota Orbits.app"
+INSTALLED_APP="$INSTALL_DIR/Coding Agent Limits.app"
 
 "$SCRIPT_DIR/build-app.sh"
 mkdir -p "$INSTALL_DIR"

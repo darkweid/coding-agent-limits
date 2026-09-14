@@ -12,6 +12,16 @@ enum PanelPreferencesTests {
 
             try TestSupport.assertEqual(result, "/Users/example/.local/bin/cswap")
         },
+        TestCase(name: "PanelPreferencesTests.testClaudeDefaultPrefersExecutableCandidate") {
+            let home = URL(fileURLWithPath: "/Users/example", isDirectory: true)
+
+            let result = ExecutablePathResolver.defaultClaudePath(
+                homeDirectory: home,
+                isExecutable: { $0 == "/opt/homebrew/bin/claude" }
+            )
+
+            try TestSupport.assertEqual(result, "/opt/homebrew/bin/claude")
+        },
         TestCase(name: "PanelPreferencesTests.testCodexDefaultPrefersFirstExecutableCandidate") {
             let home = URL(fileURLWithPath: "/Users/example", isDirectory: true)
             let executablePaths = Set([
@@ -62,11 +72,15 @@ enum PanelPreferencesTests {
         TestCase(name: "PanelPreferencesTests.testExecutablePathsRoundTripUnderStableKeys") {
             try await withPreferences { preferences, defaults in
                 preferences.cswapPath = "/approved/cswap"
+                preferences.claudePath = "/approved/claude"
                 preferences.codexPath = "/approved/codex"
+                preferences.claudeSourceMode = .native
 
                 let restored = PanelPreferences(defaults: defaults)
                 try TestSupport.assertEqual(restored.cswapPath, "/approved/cswap")
+                try TestSupport.assertEqual(restored.claudePath, "/approved/claude")
                 try TestSupport.assertEqual(restored.codexPath, "/approved/codex")
+                try TestSupport.assertEqual(restored.claudeSourceMode, .native)
 
                 let persistedKeys = Set(
                     defaults.dictionaryRepresentation().keys.filter {
@@ -77,7 +91,9 @@ enum PanelPreferencesTests {
                     persistedKeys,
                     Set([
                         "quotaOrbits.cswapPath",
+                        "quotaOrbits.claudePath",
                         "quotaOrbits.codexPath",
+                        "quotaOrbits.claudeSourceMode",
                     ])
                 )
             }
@@ -109,7 +125,9 @@ enum PanelPreferencesTests {
         TestCase(name: "PanelPreferencesTests.testOnlyApprovedPreferenceKeysArePersisted") {
             try await withPreferences { preferences, defaults in
                 preferences.cswapPath = "/approved/cswap"
+                preferences.claudePath = "/approved/claude"
                 preferences.codexPath = "/approved/codex"
+                preferences.claudeSourceMode = .native
                 preferences.panelOrigin = CGPoint(x: 20, y: 40)
                 preferences.isPinned = false
 
@@ -122,7 +140,9 @@ enum PanelPreferencesTests {
                     persistedKeys,
                     Set([
                         "quotaOrbits.cswapPath",
+                        "quotaOrbits.claudePath",
                         "quotaOrbits.codexPath",
+                        "quotaOrbits.claudeSourceMode",
                         "quotaOrbits.panelOrigin.x",
                         "quotaOrbits.panelOrigin.y",
                         "quotaOrbits.isPinned",
@@ -249,6 +269,30 @@ enum PanelPreferencesTests {
                 try TestSupport.assertEqual(
                     controller.panelFrameForTesting.height,
                     DashboardLayout.panelHeight(for: .orbits)
+                )
+                try TestSupport.assertEqual(
+                    controller.panelFrameForTesting.maxY,
+                    originalFrame.maxY
+                )
+            }
+        },
+        TestCase(name: "PanelPreferencesTests.testSourceChangeResizesPanelFromItsTopEdge") {
+            try await withAsyncPreferences { preferences, _ in
+                preferences.claudeSourceMode = .cswap
+                preferences.visualStyle = .orbits
+                let controller = makeController(preferences: preferences)
+                defer { controller.close() }
+                let originalFrame = controller.panelFrameForTesting
+
+                preferences.claudeSourceMode = .native
+                await waitForMainQueue()
+
+                try TestSupport.assertEqual(
+                    controller.panelFrameForTesting.height,
+                    DashboardLayout.panelHeight(
+                        for: .orbits,
+                        claudeSourceMode: .native
+                    )
                 )
                 try TestSupport.assertEqual(
                     controller.panelFrameForTesting.maxY,
