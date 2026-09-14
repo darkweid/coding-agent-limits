@@ -66,7 +66,14 @@ struct ClaudeAccountCard: View {
             statusLine(now: now)
         }
         .padding(9)
-        .frame(maxWidth: .infinity, alignment: .top)
+        .frame(
+            height: DashboardLayout.claudeAccountHeight(
+                scopedCount: account.scoped.count,
+                visualStyle: visualStyle
+            ),
+            alignment: .top
+        )
+        .frame(maxWidth: .infinity)
         .background(
             RoundedRectangle(cornerRadius: 17, style: .continuous)
                 .fill(Color.white.opacity(0.055))

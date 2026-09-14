@@ -1,6 +1,8 @@
+import AppKit
 import Foundation
 import QuotaOrbitsCore
-@_spi(Testing) import QuotaOrbitsUI
+import SwiftUI
+@testable @_spi(Testing) import QuotaOrbitsUI
 
 enum QuotaPresentationTests {
     private static let now = Date(timeIntervalSince1970: 1_000_000)
@@ -164,6 +166,13 @@ enum QuotaPresentationTests {
                 ),
                 250
             )
+        },
+        TestCase(name: "QuotaPresentationTests.testRenderedCardsHaveUniformVisualGaps") {
+            for visualStyle in [QuotaVisualStyle.bars, .orbits] {
+                let gaps = try await renderedCardGaps(visualStyle: visualStyle)
+                try TestSupport.assertEqual(gaps.count, 2)
+                try TestSupport.assertTrue(abs(gaps[0] - gaps[1]) <= 2)
+            }
         },
         TestCase(
             name: "QuotaPresentationTests.testDashboardProjectionNeverRetainsIdentifiersOrErrors"
@@ -452,5 +461,113 @@ enum QuotaPresentationTests {
             weekly: window(remaining: remaining),
             creditsBalance: Decimal(string: "411.5127706250")
         )
+    }
+
+    @MainActor
+    private static func renderedCardGaps(visualStyle: QuotaVisualStyle) throws -> [Int] {
+        let scoped = ClaudeScopedQuota(
+            label: "Fable",
+            window: window(remaining: 19)
+        )
+        let snapshot = QuotaSnapshot(
+            claude: .available(
+                [
+                    account(
+                        id: "one",
+                        alias: "alpha",
+                        active: true,
+                        inner: 27,
+                        outer: 31,
+                        scoped: [scoped]
+                    ),
+                    account(
+                        id: "two",
+                        alias: "beta",
+                        active: false,
+                        inner: 2,
+                        outer: 25
+                    ),
+                ],
+                updatedAt: now
+            ),
+            codex: .available(codex(remaining: 18), updatedAt: now),
+            lastCycleStartedAt: now
+        )
+        let view = DashboardContentView(
+            presentation: DashboardPresentation(snapshot: snapshot),
+            displayMode: .used,
+            visualStyle: visualStyle,
+            claudeSourceMode: .cswap,
+            actions: DashboardActions(
+                isPinned: true,
+                refreshNow: {},
+                togglePinned: {},
+                openSettings: {},
+                quit: {}
+            ),
+            fixedNow: now
+        )
+        let hostingView = NSHostingView(rootView: view)
+        hostingView.frame = NSRect(
+            origin: .zero,
+            size: NSSize(
+                width: DashboardLayout.panelWidth,
+                height: DashboardLayout.panelHeight(for: visualStyle)
+            )
+        )
+        hostingView.layoutSubtreeIfNeeded()
+
+        guard let bitmap = hostingView.bitmapImageRepForCachingDisplay(in: hostingView.bounds)
+        else {
+            throw AssertionFailure(message: "Could not create dashboard bitmap")
+        }
+        hostingView.cacheDisplay(in: hostingView.bounds, to: bitmap)
+
+        let cardRuns = contiguousRuns(
+            in: 0..<bitmap.pixelsHigh,
+            where: { y in
+                guard
+                    let cardColor = bitmap.colorAt(x: 175, y: y),
+                    let panelColor = bitmap.colorAt(x: 8, y: y)
+                else { return false }
+                return luminance(cardColor) - luminance(panelColor) > 0.015
+            }
+        ).filter { $0.count > 20 }
+
+        guard cardRuns.count == 3 else {
+            throw AssertionFailure(message: "Expected 3 rendered card runs, got \(cardRuns)")
+        }
+        return zip(cardRuns, cardRuns.dropFirst()).map { current, next in
+            next.lowerBound - current.upperBound - 1
+        }
+    }
+
+    private static func contiguousRuns(
+        in values: Range<Int>,
+        where predicate: (Int) -> Bool
+    ) -> [ClosedRange<Int>] {
+        var runs: [ClosedRange<Int>] = []
+        var start: Int?
+        for value in values {
+            if predicate(value) {
+                if start == nil {
+                    start = value
+                }
+            } else if let runStart = start {
+                runs.append(runStart...(value - 1))
+                start = nil
+            }
+        }
+        if let start {
+            runs.append(start...(values.upperBound - 1))
+        }
+        return runs
+    }
+
+    private static func luminance(_ color: NSColor) -> CGFloat {
+        guard let rgb = color.usingColorSpace(.deviceRGB) else { return 0 }
+        return rgb.redComponent * 0.2126
+            + rgb.greenComponent * 0.7152
+            + rgb.blueComponent * 0.0722
     }
 }

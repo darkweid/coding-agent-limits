@@ -194,13 +194,6 @@ struct DashboardContentView: View {
                             visualStyle: visualStyle,
                             fixedNow: fixedNow
                         )
-                        .frame(
-                            minHeight: DashboardLayout.claudeAccountHeight(
-                                scopedCount: account.scoped.count,
-                                visualStyle: visualStyle
-                            ),
-                            alignment: .top
-                        )
                     }
                 }
             }
