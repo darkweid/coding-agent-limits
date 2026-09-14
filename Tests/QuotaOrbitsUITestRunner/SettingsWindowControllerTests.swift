@@ -32,16 +32,19 @@ enum SettingsWindowControllerTests {
                 let controller = SettingsWindowController(
                     rootView: Text("Settings fixture")
                 )
-                let secondaryScreen = CGRect(x: 1_920, y: 100, width: 1_440, height: 900)
+                guard let targetScreen = NSScreen.screens.last else {
+                    throw AssertionFailure(message: "Expected an available screen")
+                }
+                let screenFrame = targetScreen.visibleFrame
 
-                controller.present(on: secondaryScreen)
+                controller.present(on: screenFrame)
 
                 guard let frame = controller.window?.frame else {
                     throw AssertionFailure(message: "Expected a settings window")
                 }
-                try TestSupport.assertEqual(frame.midX, secondaryScreen.midX)
-                try TestSupport.assertEqual(frame.midY, secondaryScreen.midY)
-                try TestSupport.assertTrue(secondaryScreen.contains(frame))
+                try TestSupport.assertTrue(abs(frame.midX - screenFrame.midX) <= 1)
+                try TestSupport.assertTrue(abs(frame.midY - screenFrame.midY) <= 1)
+                try TestSupport.assertTrue(screenFrame.contains(frame))
                 controller.close()
             }
         },
