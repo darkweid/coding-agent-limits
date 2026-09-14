@@ -17,6 +17,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
 
     var settingsView: some View {
         SettingsView(
+            preferences: preferences,
+            claudeSourceMode: Binding(
+                get: { [weak self] in self?.preferences.claudeSourceMode ?? .cswap },
+                set: { [weak self] in self?.setClaudeSourceMode($0) }
+            ),
             cswapPath: Binding(
                 get: { [weak self] in
                     self?.preferences.cswapPath
@@ -24,12 +29,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
                 },
                 set: { [weak self] in self?.setCswapPath($0) }
             ),
+            claudePath: Binding(
+                get: { [weak self] in
+                    self?.preferences.claudePath
+                        ?? PanelPreferences.defaultClaudePath
+                },
+                set: { [weak self] in self?.setClaudePath($0) }
+            ),
             codexPath: Binding(
                 get: { [weak self] in
                     self?.preferences.codexPath
                         ?? PanelPreferences.defaultCodexPath
                 },
                 set: { [weak self] in self?.setCodexPath($0) }
+            ),
+            refreshIntervalSeconds: Binding(
+                get: { [weak self] in self?.preferences.refreshIntervalSeconds ?? 60 },
+                set: { [weak self] in self?.setRefreshInterval($0) }
+            ),
+            displayMode: Binding(
+                get: { [weak self] in self?.preferences.displayMode ?? .used },
+                set: { [weak self] in self?.preferences.displayMode = $0 }
+            ),
+            visualStyle: Binding(
+                get: { [weak self] in self?.preferences.visualStyle ?? .bars },
+                set: { [weak self] in self?.preferences.visualStyle = $0 }
             ),
             launchAtLogin: Binding(
                 get: { [weak self] in self?.launchAtLogin.isEnabled ?? false },
@@ -106,12 +130,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         }
     }
 
+    private func setClaudePath(_ path: String) {
+        if let runtime {
+            runtime.updateClaudePath(path)
+        } else {
+            preferences.claudePath = path
+        }
+    }
+
+    private func setClaudeSourceMode(_ mode: ClaudeSourceMode) {
+        if let runtime {
+            runtime.updateClaudeSourceMode(mode)
+        } else {
+            preferences.claudeSourceMode = mode
+        }
+    }
+
     private func setCodexPath(_ path: String) {
         if let runtime {
             runtime.updateCodexPath(path)
         } else {
             preferences.codexPath = path
         }
+    }
+
+    private func setRefreshInterval(_ seconds: Int) {
+        preferences.refreshIntervalSeconds = seconds
+        runtime?.updateRefreshInterval(seconds: preferences.refreshIntervalSeconds)
     }
 
     private func setLaunchAtLogin(_ enabled: Bool) {
@@ -126,6 +171,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             controller = SettingsWindowController(rootView: settingsView)
             settingsWindowController = controller
         }
-        controller.present()
+        controller.present(on: panelController?.currentScreenVisibleFrame)
     }
 }

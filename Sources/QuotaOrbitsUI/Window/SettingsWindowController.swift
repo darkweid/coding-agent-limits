@@ -22,7 +22,21 @@ public final class SettingsWindowController: NSWindowController {
         fatalError("init(coder:) is unavailable")
     }
 
-    public func present() {
+    public func present(on screenFrame: CGRect? = nil) {
+        if let screenFrame, let window {
+            window.contentView?.layoutSubtreeIfNeeded()
+            let origin = CGPoint(
+                x: screenFrame.midX - window.frame.width / 2,
+                y: screenFrame.midY - window.frame.height / 2
+            )
+            window.setFrameOrigin(
+                PanelPlacement.clampedOrigin(
+                    origin,
+                    panelSize: window.frame.size,
+                    screenFrames: [screenFrame]
+                )
+            )
+        }
         NSApp.activate(ignoringOtherApps: true)
         showWindow(nil)
         window?.makeKeyAndOrderFront(nil)

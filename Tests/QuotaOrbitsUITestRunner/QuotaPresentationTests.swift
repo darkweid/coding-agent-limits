@@ -1,6 +1,8 @@
+import AppKit
 import Foundation
 import QuotaOrbitsCore
-@_spi(Testing) import QuotaOrbitsUI
+import SwiftUI
+@testable @_spi(Testing) import QuotaOrbitsUI
 
 enum QuotaPresentationTests {
     private static let now = Date(timeIntervalSince1970: 1_000_000)
@@ -16,11 +18,49 @@ enum QuotaPresentationTests {
                 QuotaCopy.resetCountdown(window: window(remaining: 28, minutes: 205), now: now),
                 "resets in 3h 25m"
             )
+            try TestSupport.assertEqual(
+                QuotaCopy.resetCountdown(
+                    window: QuotaWindow(usedPercent: 100, resetsAt: nil),
+                    now: now
+                ),
+                "reset unavailable"
+            )
             try TestSupport.assertEqual(QuotaCopy.resetCountdown(window: nil, now: now), "no data")
             try TestSupport.assertEqual(
                 QuotaCopy.stale(lastSuccessAt: now.addingTimeInterval(-125), now: now),
                 "updated 2 min ago")
             try TestSupport.assertEqual(QuotaCopy.credits(credits), "411.51")
+        },
+        TestCase(name: "QuotaPresentationTests.testDisplayModeProjectsUsedOrRemaining") {
+            try TestSupport.assertEqual(
+                QuotaDisplayValue.percent(usedPercent: 72, mode: .used),
+                72
+            )
+            try TestSupport.assertEqual(
+                QuotaDisplayValue.percent(usedPercent: 72, mode: .remaining),
+                28
+            )
+            try TestSupport.assertEqual(
+                QuotaDisplayValue.percent(usedPercent: nil, mode: .remaining),
+                nil
+            )
+            try TestSupport.assertEqual(
+                QuotaDisplayValue.label(for: .used),
+                "used"
+            )
+            try TestSupport.assertEqual(
+                QuotaDisplayValue.label(for: .remaining),
+                "remaining"
+            )
+        },
+        TestCase(name: "SettingsViewTests.testRefreshIntervalLabelIsCompact") {
+            try TestSupport.assertEqual(SettingsPresentation.refreshLabel(seconds: 30), "30 sec")
+            try TestSupport.assertEqual(SettingsPresentation.refreshLabel(seconds: 60), "1 min")
+            try TestSupport.assertEqual(SettingsPresentation.refreshLabel(seconds: 150), "2m 30s")
+        },
+        TestCase(name: "SettingsViewTests.testClaudeSourceSelectsMatchingExecutablePath") {
+            try TestSupport.assertEqual(SettingsPresentation.pathKind(for: .cswap), .cswap)
+            try TestSupport.assertEqual(SettingsPresentation.pathKind(for: .native), .claude)
         },
         TestCase(name: "QuotaPresentationTests.testContextActionsUseNeutralApprovedCopy") {
             try TestSupport.assertEqual(
@@ -31,6 +71,108 @@ enum QuotaPresentationTests {
                 DashboardCopy.contextActions(isPinned: false),
                 ["Refresh Now", "Pin", "Settings…", "Quit"]
             )
+        },
+        TestCase(name: "QuotaPresentationTests.testProviderHeadersUseBrandMarksAndStableNames") {
+            try TestSupport.assertEqual(ProviderHeaderCopy.claudeMarkAccessibilityLabel, "Claude")
+            try TestSupport.assertEqual(ProviderHeaderCopy.codexTitle, "codex")
+            try TestSupport.assertEqual(ProviderHeaderCopy.openAIAccessibilityLabel, "OpenAI")
+            try TestSupport.assertEqual(
+                ProviderHeaderCopy.claudeAccessibilityLabel(alias: "max", isActive: true),
+                "Claude max, active account"
+            )
+            try TestSupport.assertEqual(
+                ProviderHeaderCopy.claudeAccessibilityLabel(alias: "pro", isActive: false),
+                "Claude pro"
+            )
+            try TestSupport.assertEqual(
+                ProviderHeaderCopy.codexAccessibilityLabel(isActive: true),
+                "Codex, active account"
+            )
+            try TestSupport.assertEqual(
+                ProviderHeaderCopy.codexAccessibilityLabel(isActive: false),
+                "Codex"
+            )
+        },
+        TestCase(name: "QuotaPresentationTests.testProviderMarksHaveMatchingVisibleSize") {
+            try TestSupport.assertEqual(ProviderMarkMetrics.claudeVisibleDiameter, 15)
+            try TestSupport.assertEqual(ProviderMarkMetrics.openAIVisibleDiameter, 15)
+            try TestSupport.assertEqual(ProviderMarkMetrics.openAILobeHeight, 10)
+            try TestSupport.assertEqual(ProviderMarkMetrics.openAILobeOffset, 2.5)
+            try TestSupport.assertEqual(ProviderMarkMetrics.openAIOuterRadius, 7.5)
+        },
+        TestCase(name: "QuotaPresentationTests.testActiveIndicatorsUseTrailingPlacement") {
+            try TestSupport.assertEqual(
+                ProviderHeaderLayout.activeIndicatorPlacement(for: .claude),
+                .trailing
+            )
+            try TestSupport.assertEqual(
+                ProviderHeaderLayout.activeIndicatorPlacement(for: .codex),
+                .trailing
+            )
+        },
+        TestCase(name: "QuotaPresentationTests.testOrbitGaugeUsesProminentDiameter") {
+            try TestSupport.assertEqual(QuotaOrbitMetrics.diameter, 55.2)
+            try TestSupport.assertEqual(
+                DashboardLayout.requiredClaudeSectionHeight(
+                    scopedCounts: [1, 0],
+                    visualStyle: .orbits
+                ),
+                DashboardLayout.claudeSectionHeight(for: .orbits)
+            )
+            try TestSupport.assertEqual(
+                DashboardLayout.claudeAccountHeight(
+                    scopedCount: 0,
+                    visualStyle: .orbits
+                ),
+                140
+            )
+        },
+        TestCase(name: "QuotaPresentationTests.testDashboardFitsOneScopedClaudeCardWithoutOverlap")
+        {
+            let panelHeight = await MainActor.run {
+                DesktopPanelController.panelSize(for: .bars).height
+            }
+
+            try TestSupport.assertEqual(
+                DashboardLayout.requiredClaudeSectionHeight(scopedCounts: [1, 0]),
+                250
+            )
+            try TestSupport.assertTrue(
+                DashboardLayout.claudeSectionHeight(for: .bars)
+                    >= DashboardLayout.requiredClaudeSectionHeight(scopedCounts: [1, 0])
+            )
+            try TestSupport.assertEqual(DashboardLayout.totalContentHeight(for: .bars), 406)
+            try TestSupport.assertEqual(DashboardLayout.totalContentHeight(for: .orbits), 480)
+            try TestSupport.assertEqual(
+                panelHeight,
+                DashboardLayout.panelHeight(for: .bars)
+            )
+        },
+        TestCase(name: "QuotaPresentationTests.testVisibleCardsUseUniformVerticalSpacing") {
+            try TestSupport.assertEqual(DashboardLayout.cardSpacing, 8)
+            try TestSupport.assertEqual(
+                DashboardLayout.visibleClaudeSectionHeight(
+                    scopedCounts: [0, 0],
+                    visualStyle: .bars,
+                    claudeSourceMode: .cswap
+                ),
+                218
+            )
+            try TestSupport.assertEqual(
+                DashboardLayout.visibleClaudeSectionHeight(
+                    scopedCounts: [0, 0, 0, 0],
+                    visualStyle: .bars,
+                    claudeSourceMode: .cswap
+                ),
+                250
+            )
+        },
+        TestCase(name: "QuotaPresentationTests.testRenderedCardsHaveUniformVisualGaps") {
+            for visualStyle in [QuotaVisualStyle.bars, .orbits] {
+                let gaps = try await renderedCardGaps(visualStyle: visualStyle)
+                try TestSupport.assertEqual(gaps.count, 2)
+                try TestSupport.assertTrue(abs(gaps[0] - gaps[1]) <= 2)
+            }
         },
         TestCase(
             name: "QuotaPresentationTests.testDashboardProjectionNeverRetainsIdentifiersOrErrors"
@@ -57,14 +199,33 @@ enum QuotaPresentationTests {
             try TestSupport.assertEqual(presentation.accounts.map(\.id), ["slot-1", "slot-2"])
             try TestSupport.assertEqual(
                 presentation.accounts[0].status.text(now: now), "updated 2 min ago")
-            try TestSupport.assertEqual(presentation.codex.symbol, "◇")
             try TestSupport.assertEqual(presentation.codex.status.text(now: now), "no data")
         },
         TestCase(
             name: "QuotaPresentationTests.testDashboardProjectionKeepsTwoAliasesAndLatestSuccess"
         ) {
             let accounts = [
-                account(id: "one", alias: "max", active: true, inner: 100, outer: 81),
+                account(
+                    id: "one",
+                    alias: "max",
+                    active: true,
+                    inner: 100,
+                    outer: 81,
+                    scoped: [
+                        ClaudeScopedQuota(
+                            label: "Fable",
+                            window: window(remaining: 21)
+                        ),
+                        ClaudeScopedQuota(
+                            label: "Other",
+                            window: window(remaining: 75)
+                        ),
+                        ClaudeScopedQuota(
+                            label: "private@example.invalid",
+                            window: window(remaining: 88)
+                        ),
+                    ]
+                ),
                 account(
                     id: "two", alias: "очень-длинное-нейтральное-имя", active: false, inner: 28,
                     outer: 93),
@@ -84,9 +245,41 @@ enum QuotaPresentationTests {
                 presentation.accounts.map(\.fiveHour?.remainingPercent), [100, 28])
             try TestSupport.assertEqual(
                 presentation.accounts.map(\.weekly?.remainingPercent), [81, 93])
+            try TestSupport.assertEqual(
+                presentation.accounts[0].scoped.map(\.label), ["Fable"])
+            try TestSupport.assertEqual(
+                presentation.accounts[0].scoped.map(\.window.remainingPercent), [21])
+            try TestSupport.assertEqual(presentation.accounts[1].scoped, [])
             try TestSupport.assertEqual(presentation.codex.fiveHour?.remainingPercent, 25)
             try TestSupport.assertEqual(presentation.codex.weekly?.remainingPercent, 50)
+            try TestSupport.assertTrue(presentation.codex.isActive)
             try TestSupport.assertEqual(presentation.lastSuccessfulRefreshAt, now)
+        },
+        TestCase(name: "QuotaPresentationTests.testDashboardProjectionKeepsAllAccountsForScrolling")
+        {
+            let accounts = [
+                account(id: "one", alias: "max", active: true, inner: 80, outer: 70),
+                account(id: "two", alias: "pro", active: false, inner: 60, outer: 50),
+                account(id: "three", alias: "lab", active: false, inner: 40, outer: 30),
+                account(id: "four", alias: "spare", active: false, inner: 20, outer: 10),
+            ]
+
+            let presentation = DashboardPresentation(
+                snapshot: QuotaSnapshot(
+                    claude: .available(accounts, updatedAt: now),
+                    codex: .unavailable(message: "unavailable")
+                )
+            )
+
+            try TestSupport.assertEqual(presentation.accounts.count, 4)
+            try TestSupport.assertEqual(
+                presentation.accounts.map(\.alias),
+                ["max", "pro", "lab", "spare"]
+            )
+            try TestSupport.assertTrue(
+                DashboardLayout.requiredClaudeSectionHeight(scopedCounts: [0, 0, 0, 0])
+                    > DashboardLayout.claudeSectionHeight(for: .bars)
+            )
         },
         TestCase(name: "QuotaPresentationTests.testUnavailableProjectionUsesNeutralPlaceholders") {
             let presentation = DashboardPresentation(
@@ -106,7 +299,51 @@ enum QuotaPresentationTests {
                 "no data"
             )
             try TestSupport.assertEqual(presentation.codex.status.text(now: now), "no data")
+            try TestSupport.assertFalse(presentation.codex.isActive)
             try TestSupport.assertEqual(presentation.lastSuccessfulRefreshAt, nil)
+        },
+        TestCase(name: "QuotaPresentationTests.testNativeClaudeUsesOneAccountSlot") {
+            let presentation = DashboardPresentation(
+                snapshot: QuotaSnapshot(
+                    claude: .unavailable(message: "unavailable"),
+                    codex: .unavailable(message: "unavailable")
+                ),
+                claudeSourceMode: .native
+            )
+
+            try TestSupport.assertEqual(presentation.accounts.map(\.alias), ["01"])
+            try TestSupport.assertEqual(
+                DashboardLayout.panelHeight(for: .bars, claudeSourceMode: .native),
+                293
+            )
+            try TestSupport.assertEqual(
+                DashboardLayout.panelHeight(for: .orbits, claudeSourceMode: .native),
+                332
+            )
+        },
+        TestCase(name: "QuotaPresentationTests.testAvailableSourcePreservesPerAccountFreshness") {
+            let cachedAt = now.addingTimeInterval(-300)
+            let accounts = [
+                account(
+                    id: "one", alias: "max", active: true, inner: 27, outer: 59,
+                    state: .stale(lastSuccessAt: cachedAt)),
+                account(
+                    id: "two", alias: "pro", active: false, inner: 88, outer: 76,
+                    state: .fresh),
+            ]
+
+            let presentation = DashboardPresentation(
+                snapshot: QuotaSnapshot(
+                    claude: .available(accounts, updatedAt: now),
+                    codex: .unavailable(message: "unavailable")
+                )
+            )
+
+            try TestSupport.assertEqual(
+                presentation.accounts[0].status,
+                .stale(lastSuccessAt: cachedAt)
+            )
+            try TestSupport.assertEqual(presentation.accounts[1].status, .fresh)
         },
         TestCase(
             name: "QuotaPresentationTests.testLoadingProjectionKeepsPlaceholdersWithoutFailureCopy"
@@ -144,14 +381,25 @@ enum QuotaPresentationTests {
                 QuotaBarAccessibility.value(
                     window: "5 hours",
                     used: 72,
+                    countdown: "resets in 3h 25m",
                     dataState: .available
                 ),
-                "5 hours, 72% used"
+                "5 hours, 72% used, resets in 3h 25m"
+            )
+            try TestSupport.assertEqual(
+                QuotaBarAccessibility.value(
+                    window: "5 hours",
+                    used: 100,
+                    countdown: "reset unavailable",
+                    dataState: .available
+                ),
+                "5 hours, 100% used, reset unavailable"
             )
             try TestSupport.assertEqual(
                 QuotaBarAccessibility.value(
                     window: "7 days",
                     used: nil,
+                    countdown: "—",
                     dataState: .loading
                 ),
                 "7 days, loading"
@@ -160,6 +408,7 @@ enum QuotaPresentationTests {
                 QuotaBarAccessibility.value(
                     window: "7 days",
                     used: nil,
+                    countdown: "no data",
                     dataState: .unavailable
                 ),
                 "7 days, no data"
@@ -191,14 +440,18 @@ enum QuotaPresentationTests {
         alias: String,
         active: Bool,
         inner: Double,
-        outer: Double
+        outer: Double,
+        scoped: [ClaudeScopedQuota] = [],
+        state: ClaudeAccountQuotaState = .fresh
     ) -> ClaudeAccountQuota {
         ClaudeAccountQuota(
             id: id,
             alias: alias,
             isActive: active,
             fiveHour: window(remaining: inner),
-            weekly: window(remaining: outer)
+            weekly: window(remaining: outer),
+            scoped: scoped,
+            state: state
         )
     }
 
@@ -208,5 +461,113 @@ enum QuotaPresentationTests {
             weekly: window(remaining: remaining),
             creditsBalance: Decimal(string: "411.5127706250")
         )
+    }
+
+    @MainActor
+    private static func renderedCardGaps(visualStyle: QuotaVisualStyle) throws -> [Int] {
+        let scoped = ClaudeScopedQuota(
+            label: "Fable",
+            window: window(remaining: 19)
+        )
+        let snapshot = QuotaSnapshot(
+            claude: .available(
+                [
+                    account(
+                        id: "one",
+                        alias: "alpha",
+                        active: true,
+                        inner: 27,
+                        outer: 31,
+                        scoped: [scoped]
+                    ),
+                    account(
+                        id: "two",
+                        alias: "beta",
+                        active: false,
+                        inner: 2,
+                        outer: 25
+                    ),
+                ],
+                updatedAt: now
+            ),
+            codex: .available(codex(remaining: 18), updatedAt: now),
+            lastCycleStartedAt: now
+        )
+        let view = DashboardContentView(
+            presentation: DashboardPresentation(snapshot: snapshot),
+            displayMode: .used,
+            visualStyle: visualStyle,
+            claudeSourceMode: .cswap,
+            actions: DashboardActions(
+                isPinned: true,
+                refreshNow: {},
+                togglePinned: {},
+                openSettings: {},
+                quit: {}
+            ),
+            fixedNow: now
+        )
+        let hostingView = NSHostingView(rootView: view)
+        hostingView.frame = NSRect(
+            origin: .zero,
+            size: NSSize(
+                width: DashboardLayout.panelWidth,
+                height: DashboardLayout.panelHeight(for: visualStyle)
+            )
+        )
+        hostingView.layoutSubtreeIfNeeded()
+
+        guard let bitmap = hostingView.bitmapImageRepForCachingDisplay(in: hostingView.bounds)
+        else {
+            throw AssertionFailure(message: "Could not create dashboard bitmap")
+        }
+        hostingView.cacheDisplay(in: hostingView.bounds, to: bitmap)
+
+        let cardRuns = contiguousRuns(
+            in: 0..<bitmap.pixelsHigh,
+            where: { y in
+                guard
+                    let cardColor = bitmap.colorAt(x: 175, y: y),
+                    let panelColor = bitmap.colorAt(x: 8, y: y)
+                else { return false }
+                return luminance(cardColor) - luminance(panelColor) > 0.015
+            }
+        ).filter { $0.count > 20 }
+
+        guard cardRuns.count == 3 else {
+            throw AssertionFailure(message: "Expected 3 rendered card runs, got \(cardRuns)")
+        }
+        return zip(cardRuns, cardRuns.dropFirst()).map { current, next in
+            next.lowerBound - current.upperBound - 1
+        }
+    }
+
+    private static func contiguousRuns(
+        in values: Range<Int>,
+        where predicate: (Int) -> Bool
+    ) -> [ClosedRange<Int>] {
+        var runs: [ClosedRange<Int>] = []
+        var start: Int?
+        for value in values {
+            if predicate(value) {
+                if start == nil {
+                    start = value
+                }
+            } else if let runStart = start {
+                runs.append(runStart...(value - 1))
+                start = nil
+            }
+        }
+        if let start {
+            runs.append(start...(values.upperBound - 1))
+        }
+        return runs
+    }
+
+    private static func luminance(_ color: NSColor) -> CGFloat {
+        guard let rgb = color.usingColorSpace(.deviceRGB) else { return 0 }
+        return rgb.redComponent * 0.2126
+            + rgb.greenComponent * 0.7152
+            + rgb.blueComponent * 0.0722
     }
 }

@@ -29,6 +29,13 @@ enum QuotaRefreshCoordinatorTests {
         ) {
             try await testManualTickerDrivesDeterministicSubsequentCycle()
         },
+        TestCase(name: "QuotaRefreshCoordinatorTests.testRefreshIntervalCanBeChangedWhileRunning") {
+            try await testRefreshIntervalCanBeChangedWhileRunning()
+        },
+        TestCase(name: "QuotaRefreshCoordinatorTests.testIntervalChangeDoesNotCancelActiveRefresh")
+        {
+            try await testIntervalChangeDoesNotCancelActiveRefresh()
+        },
         TestCase(name: "QuotaRefreshCoordinatorTests.testUnknownErrorDetailsAreNotExposed") {
             try await testUnknownErrorDetailsAreNotExposed()
         },
@@ -194,6 +201,50 @@ enum QuotaRefreshCoordinatorTests {
                 message: "Quota data is unavailable."
             )
         )
+    }
+
+    @MainActor
+    private static func testRefreshIntervalCanBeChangedWhileRunning() async throws {
+        let ticker = ManualRefreshTicker()
+        let coordinator = makeCoordinator(
+            claude: SequencedClaudeSource([
+                .success(twoClaudeAccounts), .success(twoClaudeAccounts),
+            ]),
+            codex: SequencedCodexSource([.success(codexQuota), .success(codexQuota)]),
+            ticker: ticker
+        )
+
+        coordinator.start()
+        await coordinator.waitForIdleForTesting()
+        coordinator.updateRefreshInterval(.seconds(150))
+        try await waitUntil { ticker.requestedIntervals.count == 2 }
+        coordinator.stop()
+        ticker.finish()
+
+        try TestSupport.assertEqual(ticker.requestedIntervals, [.seconds(60), .seconds(150)])
+    }
+
+    @MainActor
+    private static func testIntervalChangeDoesNotCancelActiveRefresh() async throws {
+        let ticker = ManualRefreshTicker()
+        let claude = CancellationAwareClaudeSource(value: twoClaudeAccounts)
+        let codex = SequencedCodexSource([.success(codexQuota), .success(codexQuota)])
+        let coordinator = makeCoordinator(claude: claude, codex: codex, ticker: ticker)
+
+        coordinator.start()
+        await claude.waitUntilFetchStarted()
+        coordinator.updateRefreshInterval(.seconds(150))
+        for _ in 0..<10 { await Task.yield() }
+
+        try TestSupport.assertEqual(await claude.cancellationCount, 0)
+        await claude.releaseFirstFetch()
+        try await waitUntilAsync { await claude.fetchCount >= 2 }
+        await coordinator.waitForIdleForTesting()
+        coordinator.stop()
+        ticker.finish()
+
+        try TestSupport.assertEqual(ticker.requestedIntervals, [.seconds(60), .seconds(150)])
+        try TestSupport.assertEqual(await claude.fetchCount, 2)
     }
 
     @MainActor

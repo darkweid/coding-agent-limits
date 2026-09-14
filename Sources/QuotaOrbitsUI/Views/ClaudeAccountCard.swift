@@ -1,7 +1,10 @@
+import QuotaOrbitsCore
 import SwiftUI
 
 struct ClaudeAccountCard: View {
     let account: AccountCardPresentation
+    let displayMode: QuotaDisplayMode
+    let visualStyle: QuotaVisualStyle
     var fixedNow: Date?
 
     var body: some View {
@@ -17,50 +20,78 @@ struct ClaudeAccountCard: View {
     }
 
     private func content(now: Date) -> some View {
-        VStack(spacing: 5) {
+        VStack(spacing: 4) {
             HStack(spacing: 6) {
+                ClaudeMark()
+                    .frame(
+                        width: ProviderMarkMetrics.canvasSize,
+                        height: ProviderMarkMetrics.canvasSize
+                    )
+                    .foregroundStyle(Color(red: 0.85, green: 0.43, blue: 0.29))
+                    .accessibilityHidden(true)
                 Text(account.alias)
                     .font(.system(size: 14, weight: .semibold, design: .rounded))
                     .foregroundStyle(Color.white.opacity(0.58))
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .minimumScaleFactor(0.72)
-                Spacer(minLength: 2)
-                if account.isActive {
-                    Circle()
-                        .fill(QuotaPalette.color(for: .healthy))
-                        .frame(width: 6, height: 6)
-                        .accessibilityLabel("Active account")
+                ProviderActiveIndicator(provider: .claude, isActive: account.isActive)
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(
+                ProviderHeaderCopy.claudeAccessibilityLabel(
+                    alias: account.alias,
+                    isActive: account.isActive
+                )
+            )
+
+            Group {
+                if visualStyle == .orbits {
+                    HStack(spacing: 4) {
+                        quotaGauge(window: "5 hours", quotaWindow: account.fiveHour, now: now)
+                        quotaGauge(window: "7 days", quotaWindow: account.weekly, now: now)
+                        ForEach(Array(account.scoped.enumerated()), id: \.offset) { _, scoped in
+                            quotaGauge(window: scoped.label, quotaWindow: scoped.window, now: now)
+                        }
+                    }
+                } else {
+                    quotaGauge(window: "5 hours", quotaWindow: account.fiveHour, now: now)
+                    quotaGauge(window: "7 days", quotaWindow: account.weekly, now: now)
+                    ForEach(Array(account.scoped.enumerated()), id: \.offset) { _, scoped in
+                        quotaGauge(window: scoped.label, quotaWindow: scoped.window, now: now)
+                    }
                 }
             }
-
-            QuotaBarView(
-                window: "5 hours",
-                countdown: account.status.resetCountdown(
-                    window: account.fiveHour,
-                    now: now
-                ),
-                usedPercent: account.fiveHour?.usedPercent,
-                dataState: account.status.barDataState
-            )
-
-            QuotaBarView(
-                window: "7 days",
-                countdown: account.status.resetCountdown(
-                    window: account.weekly,
-                    now: now
-                ),
-                usedPercent: account.weekly?.usedPercent,
-                dataState: account.status.barDataState
-            )
 
             statusLine(now: now)
         }
         .padding(9)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .frame(
+            height: DashboardLayout.claudeAccountHeight(
+                scopedCount: account.scoped.count,
+                visualStyle: visualStyle
+            ),
+            alignment: .top
+        )
+        .frame(maxWidth: .infinity)
         .background(
             RoundedRectangle(cornerRadius: 17, style: .continuous)
                 .fill(Color.white.opacity(0.055))
+        )
+    }
+
+    private func quotaGauge(
+        window: String,
+        quotaWindow: QuotaWindow?,
+        now: Date
+    ) -> some View {
+        QuotaGaugeView(
+            window: window,
+            countdown: account.status.resetCountdown(window: quotaWindow, now: now),
+            usedPercent: quotaWindow?.usedPercent,
+            dataState: account.status.barDataState,
+            displayMode: displayMode,
+            visualStyle: visualStyle
         )
     }
 

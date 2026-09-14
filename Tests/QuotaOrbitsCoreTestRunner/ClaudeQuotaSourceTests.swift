@@ -14,12 +14,27 @@ enum ClaudeQuotaSourceTests {
             let accounts = try await source.fetch()
 
             try TestSupport.assertEqual(accounts.map(\.alias), ["max", "pro"])
-            try TestSupport.assertEqual(accounts[0].fiveHour.remainingPercent, 100)
-            try TestSupport.assertEqual(accounts[0].weekly.remainingPercent, 81)
-            try TestSupport.assertEqual(accounts[1].fiveHour.remainingPercent, 28)
-            try TestSupport.assertEqual(accounts[1].weekly.remainingPercent, 93)
+            try TestSupport.assertEqual(accounts[0].fiveHour?.remainingPercent, 100)
+            try TestSupport.assertEqual(accounts[0].weekly?.remainingPercent, 81)
+            try TestSupport.assertEqual(accounts[1].fiveHour?.remainingPercent, 28)
+            try TestSupport.assertEqual(accounts[1].weekly?.remainingPercent, 93)
             try TestSupport.assertEqual(await runner.lastExecutable, executable)
             try TestSupport.assertEqual(await runner.lastArguments, ["list", "--json"])
+        },
+        TestCase(name: "ClaudeQuotaSourceTests.testFetchMapsScopedLimitsPerAccount") {
+            let data = try TestSupport.fixtureData("cswap-list.json")
+            let source = ClaudeQuotaSource(
+                executable: URL(fileURLWithPath: "/fake/cswap"),
+                runner: MockCommandRunner(
+                    result: CommandResult(stdout: data, stderr: Data(), exitCode: 0)
+                )
+            )
+
+            let accounts = try await source.fetch()
+
+            try TestSupport.assertEqual(accounts[0].scoped.map(\.label), ["Fable", "Other"])
+            try TestSupport.assertEqual(accounts[0].scoped.map(\.window.usedPercent), [79, 25])
+            try TestSupport.assertEqual(accounts[1].scoped, [])
         },
         TestCase(name: "ClaudeQuotaSourceTests.testMissingAliasFallsBackToTwoDigitSlot") {
             let data = try fixtureWithFirstAliasRemoved()
@@ -40,9 +55,73 @@ enum ClaudeQuotaSourceTests {
             try TestSupport.assertEqual(accounts.count, 1)
             try TestSupport.assertEqual(accounts[0].alias, "max")
             try TestSupport.assertEqual(
-                accounts[0].fiveHour.resetsAt,
+                accounts[0].fiveHour?.resetsAt,
                 Date(timeIntervalSince1970: 1_786_105_800)
             )
+        },
+        TestCase(name: "ClaudeQuotaSourceTests.testMissingFiveHourResetKeepsAccountAvailable") {
+            let source = sourceReturningMissingFiveHourReset()
+
+            let accounts = try await source.fetch()
+
+            try TestSupport.assertEqual(accounts.count, 1)
+            try TestSupport.assertEqual(accounts[0].fiveHour?.usedPercent, 100)
+            try TestSupport.assertEqual(accounts[0].fiveHour?.resetsAt, nil)
+            try TestSupport.assertEqual(accounts[0].weekly?.usedPercent, 19)
+        },
+        TestCase(name: "ClaudeQuotaSourceTests.testMissingSevenDayWindowKeepsFiveHourDataAvailable")
+        {
+            let source = sourceReturningMissingSevenDayWindow()
+
+            let accounts = try await source.fetch()
+
+            try TestSupport.assertEqual(accounts.count, 1)
+            try TestSupport.assertEqual(accounts[0].fiveHour?.usedPercent, 38)
+            try TestSupport.assertEqual(accounts[0].weekly, nil)
+            try TestSupport.assertEqual(accounts[0].state, .fresh)
+        },
+        TestCase(name: "ClaudeQuotaSourceTests.testMissingFiveHourWindowKeepsSevenDayDataAvailable")
+        {
+            let source = sourceReturningMissingFiveHourWindow()
+
+            let accounts = try await source.fetch()
+
+            try TestSupport.assertEqual(accounts.count, 1)
+            try TestSupport.assertEqual(accounts[0].fiveHour, nil)
+            try TestSupport.assertEqual(accounts[0].weekly?.usedPercent, 62)
+            try TestSupport.assertEqual(accounts[0].state, .fresh)
+        },
+        TestCase(
+            name:
+                "ClaudeQuotaSourceTests.testUnavailableAccountUsesLastGoodUsageWithoutBlockingFreshAccounts"
+        ) {
+            let source = sourceReturningMixedCurrentAndLastGoodUsage()
+
+            let accounts = try await source.fetch()
+
+            try TestSupport.assertEqual(accounts.map(\.alias), ["max", "pro"])
+            try TestSupport.assertEqual(accounts[0].fiveHour?.usedPercent, 73)
+            try TestSupport.assertEqual(accounts[0].weekly?.usedPercent, 41)
+            try TestSupport.assertEqual(accounts[0].scoped.map(\.label), ["Fable"])
+            try TestSupport.assertEqual(
+                accounts[0].state,
+                .stale(lastSuccessAt: Date(timeIntervalSince1970: 1_789_286_100))
+            )
+            try TestSupport.assertEqual(accounts[1].fiveHour?.usedPercent, 12)
+            try TestSupport.assertEqual(accounts[1].weekly?.usedPercent, 24)
+            try TestSupport.assertEqual(accounts[1].state, .fresh)
+        },
+        TestCase(name: "ClaudeQuotaSourceTests.testAccountWithoutCurrentOrCachedUsageIsUnavailable")
+        {
+            let source = sourceReturningUnavailableAccountWithoutCache()
+
+            let accounts = try await source.fetch()
+
+            try TestSupport.assertEqual(accounts.count, 1)
+            try TestSupport.assertEqual(accounts[0].alias, "max")
+            try TestSupport.assertEqual(accounts[0].fiveHour, nil)
+            try TestSupport.assertEqual(accounts[0].weekly, nil)
+            try TestSupport.assertEqual(accounts[0].state, .unavailable)
         },
         TestCase(name: "ClaudeQuotaSourceTests.testFetchDoesNotTruncateAccounts") {
             let source = sourceReturningThreeAccounts()
@@ -185,6 +264,168 @@ enum ClaudeQuotaSourceTests {
                         "sevenDay": { "pct": 10.0, "resetsAt": "2026-08-13T07:00:00.000000+00:00" }
                       },
                       "alias": "lab"
+                    }
+                  ]
+                }
+                """.utf8),
+            stderr: Data(),
+            exitCode: 0
+        )
+        return ClaudeQuotaSource(
+            executable: URL(fileURLWithPath: "/fake/cswap"),
+            runner: MockCommandRunner(result: result)
+        )
+    }
+
+    private static func sourceReturningMissingFiveHourReset() -> ClaudeQuotaSource {
+        let result = CommandResult(
+            stdout: Data(
+                """
+                {
+                  "schemaVersion": 1,
+                  "activeAccountNumber": 1,
+                  "accounts": [
+                    {
+                      "number": 1,
+                      "active": true,
+                      "usage": {
+                        "fiveHour": { "pct": 100.0 },
+                        "sevenDay": {
+                          "pct": 19.0,
+                          "resetsAt": "2026-08-12T07:00:00.162148+00:00"
+                        }
+                      },
+                      "alias": "max"
+                    }
+                  ]
+                }
+                """.utf8),
+            stderr: Data(),
+            exitCode: 0
+        )
+        return ClaudeQuotaSource(
+            executable: URL(fileURLWithPath: "/fake/cswap"),
+            runner: MockCommandRunner(result: result)
+        )
+    }
+
+    private static func sourceReturningMixedCurrentAndLastGoodUsage() -> ClaudeQuotaSource {
+        let result = CommandResult(
+            stdout: Data(
+                """
+                {
+                  "schemaVersion": 1,
+                  "activeAccountNumber": 1,
+                  "accounts": [
+                    {
+                      "number": 1,
+                      "active": true,
+                      "usageStatus": "no_credentials",
+                      "usage": null,
+                      "lastGoodUsage": {
+                        "fiveHour": { "pct": 73.0, "resetsAt": "2026-09-13T08:00:00+00:00" },
+                        "sevenDay": { "pct": 41.0, "resetsAt": "2026-09-18T08:00:00+00:00" },
+                        "scoped": [
+                          { "name": "Fable", "pct": 16.0, "resetsAt": "2026-09-18T08:00:00+00:00" }
+                        ]
+                      },
+                      "lastGoodFetchedAt": "2026-09-13T07:55:00+00:00",
+                      "alias": "max"
+                    },
+                    {
+                      "number": 2,
+                      "active": false,
+                      "usageStatus": "ok",
+                      "usage": {
+                        "fiveHour": { "pct": 12.0, "resetsAt": "2026-09-13T12:00:00+00:00" },
+                        "sevenDay": { "pct": 24.0, "resetsAt": "2026-09-19T08:00:00+00:00" }
+                      },
+                      "alias": "pro"
+                    }
+                  ]
+                }
+                """.utf8),
+            stderr: Data(),
+            exitCode: 0
+        )
+        return ClaudeQuotaSource(
+            executable: URL(fileURLWithPath: "/fake/cswap"),
+            runner: MockCommandRunner(result: result)
+        )
+    }
+
+    private static func sourceReturningMissingSevenDayWindow() -> ClaudeQuotaSource {
+        let result = CommandResult(
+            stdout: Data(
+                """
+                {
+                  "schemaVersion": 1,
+                  "activeAccountNumber": 1,
+                  "accounts": [
+                    {
+                      "number": 1,
+                      "active": true,
+                      "usageStatus": "ok",
+                      "usage": {
+                        "fiveHour": { "pct": 38.0, "resetsAt": "2026-09-13T12:00:00+00:00" }
+                      },
+                      "alias": "max"
+                    }
+                  ]
+                }
+                """.utf8),
+            stderr: Data(),
+            exitCode: 0
+        )
+        return ClaudeQuotaSource(
+            executable: URL(fileURLWithPath: "/fake/cswap"),
+            runner: MockCommandRunner(result: result)
+        )
+    }
+
+    private static func sourceReturningMissingFiveHourWindow() -> ClaudeQuotaSource {
+        let result = CommandResult(
+            stdout: Data(
+                """
+                {
+                  "schemaVersion": 1,
+                  "activeAccountNumber": 1,
+                  "accounts": [
+                    {
+                      "number": 1,
+                      "active": true,
+                      "usageStatus": "ok",
+                      "usage": {
+                        "sevenDay": { "pct": 62.0, "resetsAt": "2026-09-19T08:00:00+00:00" }
+                      },
+                      "alias": "max"
+                    }
+                  ]
+                }
+                """.utf8),
+            stderr: Data(),
+            exitCode: 0
+        )
+        return ClaudeQuotaSource(
+            executable: URL(fileURLWithPath: "/fake/cswap"),
+            runner: MockCommandRunner(result: result)
+        )
+    }
+
+    private static func sourceReturningUnavailableAccountWithoutCache() -> ClaudeQuotaSource {
+        let result = CommandResult(
+            stdout: Data(
+                """
+                {
+                  "schemaVersion": 1,
+                  "activeAccountNumber": 1,
+                  "accounts": [
+                    {
+                      "number": 1,
+                      "active": true,
+                      "usageStatus": "no_credentials",
+                      "usage": null,
+                      "alias": "max"
                     }
                   ]
                 }

@@ -37,20 +37,44 @@ public struct ClaudeQuotaSource: ClaudeQuotaFetching {
                 account.alias.flatMap { value in
                     value.isEmpty ? nil : value
                 } ?? String(format: "%02d", account.number)
+            let selected = account.selectedUsage
             return ClaudeAccountQuota(
                 id: String(account.number),
                 alias: alias,
                 isActive: account.active,
-                fiveHour: QuotaWindow(
-                    usedPercent: account.usage.fiveHour.pct,
-                    resetsAt: account.usage.fiveHour.resetsAt
-                ),
-                weekly: QuotaWindow(
-                    usedPercent: account.usage.sevenDay.pct,
-                    resetsAt: account.usage.sevenDay.resetsAt
-                )
+                fiveHour: selected.usage?.fiveHour.map(Self.quotaWindow(from:)),
+                weekly: selected.usage?.sevenDay.map(Self.quotaWindow(from:)),
+                scoped: (selected.usage?.scoped ?? []).compactMap(Self.scopedQuota(from:)),
+                state: selected.state
             )
         }
+    }
+
+    private static func quotaWindow(from window: ClaudeUsageWindow) -> QuotaWindow {
+        QuotaWindow(usedPercent: window.pct, resetsAt: window.resetsAt)
+    }
+
+    private static func scopedQuota(
+        from scoped: ClaudeScopedUsageWindow
+    ) -> ClaudeScopedQuota? {
+        let label = scoped.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let lowered = label.lowercased()
+        guard !label.isEmpty,
+            label.count <= 40,
+            !label.contains("@"),
+            !["claude", "codex"].contains(where: lowered.contains),
+            label.unicodeScalars.allSatisfy({
+                !CharacterSet.controlCharacters.contains($0)
+            })
+        else { return nil }
+
+        return ClaudeScopedQuota(
+            label: label,
+            window: QuotaWindow(
+                usedPercent: scoped.pct,
+                resetsAt: scoped.resetsAt
+            )
+        )
     }
 }
 
@@ -92,15 +116,34 @@ private struct ClaudeAccount: Decodable {
     let number: Int
     let alias: String?
     let active: Bool
-    let usage: ClaudeUsage
+    let usage: ClaudeUsage?
+    let lastGoodUsage: ClaudeUsage?
+    let lastGoodFetchedAt: Date?
+
+    var selectedUsage: (usage: ClaudeUsage?, state: ClaudeAccountQuotaState) {
+        if let usage {
+            return (usage, .fresh)
+        }
+        if let lastGoodUsage, let lastGoodFetchedAt {
+            return (lastGoodUsage, .stale(lastSuccessAt: lastGoodFetchedAt))
+        }
+        return (nil, .unavailable)
+    }
 }
 
 private struct ClaudeUsage: Decodable {
-    let fiveHour: ClaudeUsageWindow
-    let sevenDay: ClaudeUsageWindow
+    let fiveHour: ClaudeUsageWindow?
+    let sevenDay: ClaudeUsageWindow?
+    let scoped: [ClaudeScopedUsageWindow]?
 }
 
 private struct ClaudeUsageWindow: Decodable {
     let pct: Double
-    let resetsAt: Date
+    let resetsAt: Date?
+}
+
+private struct ClaudeScopedUsageWindow: Decodable {
+    let name: String
+    let pct: Double
+    let resetsAt: Date?
 }

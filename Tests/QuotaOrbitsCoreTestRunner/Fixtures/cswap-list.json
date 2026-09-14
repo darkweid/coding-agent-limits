@@ -15,7 +15,44 @@
         "sevenDay": {
           "pct": 19.0,
           "resetsAt": "2026-08-12T07:00:00.162148+00:00"
-        }
+        },
+        "scoped": [
+          {
+            "name": "Fable",
+            "pct": 79.0,
+            "resetsAt": "2026-08-08T07:00:00.162148+00:00"
+          },
+          {
+            "name": "\n",
+            "pct": 12.0,
+            "resetsAt": "2026-08-08T07:00:00.162148+00:00"
+          },
+          {
+            "name": "private@example.invalid",
+            "pct": 12.0,
+            "resetsAt": "2026-08-08T07:00:00.162148+00:00"
+          },
+          {
+            "name": "Claude Team",
+            "pct": 12.0,
+            "resetsAt": "2026-08-08T07:00:00.162148+00:00"
+          },
+          {
+            "name": "Fa\u0000ble",
+            "pct": 12.0,
+            "resetsAt": "2026-08-08T07:00:00.162148+00:00"
+          },
+          {
+            "name": "This scoped label is deliberately over forty characters",
+            "pct": 12.0,
+            "resetsAt": "2026-08-08T07:00:00.162148+00:00"
+          },
+          {
+            "name": "Other",
+            "pct": 25.0,
+            "resetsAt": "2026-08-08T07:00:00.162148+00:00"
+          }
+        ]
       },
       "alias": "max"
     },

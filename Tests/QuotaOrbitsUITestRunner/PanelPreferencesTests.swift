@@ -12,6 +12,16 @@ enum PanelPreferencesTests {
 
             try TestSupport.assertEqual(result, "/Users/example/.local/bin/cswap")
         },
+        TestCase(name: "PanelPreferencesTests.testClaudeDefaultPrefersExecutableCandidate") {
+            let home = URL(fileURLWithPath: "/Users/example", isDirectory: true)
+
+            let result = ExecutablePathResolver.defaultClaudePath(
+                homeDirectory: home,
+                isExecutable: { $0 == "/opt/homebrew/bin/claude" }
+            )
+
+            try TestSupport.assertEqual(result, "/opt/homebrew/bin/claude")
+        },
         TestCase(name: "PanelPreferencesTests.testCodexDefaultPrefersFirstExecutableCandidate") {
             let home = URL(fileURLWithPath: "/Users/example", isDirectory: true)
             let executablePaths = Set([
@@ -62,11 +72,15 @@ enum PanelPreferencesTests {
         TestCase(name: "PanelPreferencesTests.testExecutablePathsRoundTripUnderStableKeys") {
             try await withPreferences { preferences, defaults in
                 preferences.cswapPath = "/approved/cswap"
+                preferences.claudePath = "/approved/claude"
                 preferences.codexPath = "/approved/codex"
+                preferences.claudeSourceMode = .native
 
                 let restored = PanelPreferences(defaults: defaults)
                 try TestSupport.assertEqual(restored.cswapPath, "/approved/cswap")
+                try TestSupport.assertEqual(restored.claudePath, "/approved/claude")
                 try TestSupport.assertEqual(restored.codexPath, "/approved/codex")
+                try TestSupport.assertEqual(restored.claudeSourceMode, .native)
 
                 let persistedKeys = Set(
                     defaults.dictionaryRepresentation().keys.filter {
@@ -77,15 +91,43 @@ enum PanelPreferencesTests {
                     persistedKeys,
                     Set([
                         "quotaOrbits.cswapPath",
+                        "quotaOrbits.claudePath",
                         "quotaOrbits.codexPath",
+                        "quotaOrbits.claudeSourceMode",
                     ])
                 )
+            }
+        },
+        TestCase(name: "PanelPreferencesTests.testDisplayPreferencesRoundTrip") {
+            try await withPreferences { preferences, defaults in
+                preferences.refreshIntervalSeconds = 150
+                preferences.displayMode = .remaining
+                preferences.visualStyle = .orbits
+
+                let restored = PanelPreferences(defaults: defaults)
+                try TestSupport.assertEqual(restored.refreshIntervalSeconds, 150)
+                try TestSupport.assertEqual(restored.displayMode, .remaining)
+                try TestSupport.assertEqual(restored.visualStyle, .orbits)
+            }
+        },
+        TestCase(name: "PanelPreferencesTests.testRefreshIntervalIsNormalized") {
+            try await withPreferences { preferences, defaults in
+                preferences.refreshIntervalSeconds = 17
+                try TestSupport.assertEqual(preferences.refreshIntervalSeconds, 30)
+
+                preferences.refreshIntervalSeconds = 617
+                try TestSupport.assertEqual(preferences.refreshIntervalSeconds, 600)
+
+                let restored = PanelPreferences(defaults: defaults)
+                try TestSupport.assertEqual(restored.refreshIntervalSeconds, 600)
             }
         },
         TestCase(name: "PanelPreferencesTests.testOnlyApprovedPreferenceKeysArePersisted") {
             try await withPreferences { preferences, defaults in
                 preferences.cswapPath = "/approved/cswap"
+                preferences.claudePath = "/approved/claude"
                 preferences.codexPath = "/approved/codex"
+                preferences.claudeSourceMode = .native
                 preferences.panelOrigin = CGPoint(x: 20, y: 40)
                 preferences.isPinned = false
 
@@ -98,7 +140,9 @@ enum PanelPreferencesTests {
                     persistedKeys,
                     Set([
                         "quotaOrbits.cswapPath",
+                        "quotaOrbits.claudePath",
                         "quotaOrbits.codexPath",
+                        "quotaOrbits.claudeSourceMode",
                         "quotaOrbits.panelOrigin.x",
                         "quotaOrbits.panelOrigin.y",
                         "quotaOrbits.isPinned",
@@ -212,11 +256,55 @@ enum PanelPreferencesTests {
                 )
             }
         },
+        TestCase(name: "PanelPreferencesTests.testStyleChangeResizesPanelFromItsTopEdge") {
+            try await withAsyncPreferences { preferences, _ in
+                preferences.visualStyle = .bars
+                let controller = makeController(preferences: preferences)
+                defer { controller.close() }
+                let originalFrame = controller.panelFrameForTesting
+
+                preferences.visualStyle = .orbits
+                await waitForMainQueue()
+
+                try TestSupport.assertEqual(
+                    controller.panelFrameForTesting.height,
+                    DashboardLayout.panelHeight(for: .orbits)
+                )
+                try TestSupport.assertEqual(
+                    controller.panelFrameForTesting.maxY,
+                    originalFrame.maxY
+                )
+            }
+        },
+        TestCase(name: "PanelPreferencesTests.testSourceChangeResizesPanelFromItsTopEdge") {
+            try await withAsyncPreferences { preferences, _ in
+                preferences.claudeSourceMode = .cswap
+                preferences.visualStyle = .orbits
+                let controller = makeController(preferences: preferences)
+                defer { controller.close() }
+                let originalFrame = controller.panelFrameForTesting
+
+                preferences.claudeSourceMode = .native
+                await waitForMainQueue()
+
+                try TestSupport.assertEqual(
+                    controller.panelFrameForTesting.height,
+                    DashboardLayout.panelHeight(
+                        for: .orbits,
+                        claudeSourceMode: .native
+                    )
+                )
+                try TestSupport.assertEqual(
+                    controller.panelFrameForTesting.maxY,
+                    originalFrame.maxY
+                )
+            }
+        },
         TestCase(name: "PanelPreferencesTests.testScreenReturnRestoresPersistedOrigin") {
             try await withAsyncPreferences { preferences, _ in
                 let leftScreen = CGRect(x: 0, y: 0, width: 1_920, height: 1_049)
                 let rightScreen = CGRect(x: 1_920, y: 78, width: 1_920, height: 1_002)
-                let preferredOrigin = CGPoint(x: 3_488, y: 677)
+                let preferredOrigin = CGPoint(x: 3_488, y: 600)
                 let screenFrames = MutableScreenFrames([leftScreen, rightScreen])
                 let notificationCenter = NotificationCenter()
                 let scheduler = ManualPanelScreenChangeScheduler()
@@ -310,7 +398,7 @@ enum PanelPreferencesTests {
             try await withAsyncPreferences { preferences, _ in
                 let leftScreen = CGRect(x: 0, y: 0, width: 1_920, height: 1_049)
                 let rightScreen = CGRect(x: 1_920, y: 78, width: 1_920, height: 1_002)
-                let preferredOrigin = CGPoint(x: 3_488, y: 677)
+                let preferredOrigin = CGPoint(x: 3_488, y: 600)
                 let screenFrames = MutableScreenFrames([leftScreen])
                 let notificationCenter = NotificationCenter()
                 let scheduler = ManualPanelScreenChangeScheduler()

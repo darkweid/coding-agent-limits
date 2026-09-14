@@ -1,6 +1,27 @@
 import Combine
 import Foundation
 
+public enum QuotaDisplayMode: String, CaseIterable, Identifiable, Sendable {
+    case used
+    case remaining
+
+    public var id: Self { self }
+}
+
+public enum QuotaVisualStyle: String, CaseIterable, Identifiable, Sendable {
+    case bars
+    case orbits
+
+    public var id: Self { self }
+}
+
+public enum ClaudeSourceMode: String, CaseIterable, Identifiable, Sendable {
+    case cswap
+    case native
+
+    public var id: Self { self }
+}
+
 @MainActor
 public final class PanelPreferences: ObservableObject {
     public static let defaultCswapPath = ExecutablePathResolver.defaultCswapPath(
@@ -10,13 +31,44 @@ public final class PanelPreferences: ObservableObject {
         homeDirectory: FileManager.default.homeDirectoryForCurrentUser,
         isExecutable: FileManager.default.isExecutableFile(atPath:)
     )
+    public static let defaultClaudePath = ExecutablePathResolver.defaultClaudePath(
+        homeDirectory: FileManager.default.homeDirectoryForCurrentUser,
+        isExecutable: FileManager.default.isExecutableFile(atPath:)
+    )
+
+    @Published public var claudeSourceMode: ClaudeSourceMode {
+        didSet { defaults.set(claudeSourceMode.rawValue, forKey: Keys.claudeSourceMode) }
+    }
 
     @Published public var cswapPath: String {
         didSet { defaults.set(cswapPath, forKey: Keys.cswapPath) }
     }
 
+    @Published public var claudePath: String {
+        didSet { defaults.set(claudePath, forKey: Keys.claudePath) }
+    }
+
     @Published public var codexPath: String {
         didSet { defaults.set(codexPath, forKey: Keys.codexPath) }
+    }
+
+    @Published public var refreshIntervalSeconds: Int {
+        didSet {
+            let normalized = Self.normalizedRefreshInterval(refreshIntervalSeconds)
+            if normalized != refreshIntervalSeconds {
+                refreshIntervalSeconds = normalized
+                return
+            }
+            defaults.set(normalized, forKey: Keys.refreshIntervalSeconds)
+        }
+    }
+
+    @Published public var displayMode: QuotaDisplayMode {
+        didSet { defaults.set(displayMode.rawValue, forKey: Keys.displayMode) }
+    }
+
+    @Published public var visualStyle: QuotaVisualStyle {
+        didSet { defaults.set(visualStyle.rawValue, forKey: Keys.visualStyle) }
     }
 
     @Published public var panelOrigin: CGPoint? {
@@ -36,8 +88,13 @@ public final class PanelPreferences: ObservableObject {
     }
 
     private enum Keys {
+        static let claudeSourceMode = "quotaOrbits.claudeSourceMode"
         static let cswapPath = "quotaOrbits.cswapPath"
+        static let claudePath = "quotaOrbits.claudePath"
         static let codexPath = "quotaOrbits.codexPath"
+        static let refreshIntervalSeconds = "quotaOrbits.refreshIntervalSeconds"
+        static let displayMode = "quotaOrbits.displayMode"
+        static let visualStyle = "quotaOrbits.visualStyle"
         static let panelOriginX = "quotaOrbits.panelOrigin.x"
         static let panelOriginY = "quotaOrbits.panelOrigin.y"
         static let isPinned = "quotaOrbits.isPinned"
@@ -47,12 +104,28 @@ public final class PanelPreferences: ObservableObject {
 
     public init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
+        claudeSourceMode =
+            defaults.string(forKey: Keys.claudeSourceMode)
+            .flatMap(ClaudeSourceMode.init(rawValue:)) ?? .cswap
         cswapPath =
             defaults.string(forKey: Keys.cswapPath)
             ?? Self.defaultCswapPath
+        claudePath =
+            defaults.string(forKey: Keys.claudePath)
+            ?? Self.defaultClaudePath
         codexPath =
             defaults.string(forKey: Keys.codexPath)
             ?? Self.defaultCodexPath
+        let storedInterval =
+            defaults.object(forKey: Keys.refreshIntervalSeconds) == nil
+            ? 60 : defaults.integer(forKey: Keys.refreshIntervalSeconds)
+        refreshIntervalSeconds = Self.normalizedRefreshInterval(storedInterval)
+        displayMode =
+            defaults.string(forKey: Keys.displayMode)
+            .flatMap(QuotaDisplayMode.init(rawValue:)) ?? .used
+        visualStyle =
+            defaults.string(forKey: Keys.visualStyle)
+            .flatMap(QuotaVisualStyle.init(rawValue:)) ?? .bars
 
         if defaults.object(forKey: Keys.panelOriginX) != nil,
             defaults.object(forKey: Keys.panelOriginY) != nil
@@ -71,10 +144,27 @@ public final class PanelPreferences: ObservableObject {
             isPinned = defaults.bool(forKey: Keys.isPinned)
         }
     }
+
+    private static func normalizedRefreshInterval(_ value: Int) -> Int {
+        let clamped = min(max(value, 30), 600)
+        return Int((Double(clamped) / 30).rounded()) * 30
+    }
 }
 
 @_spi(Testing)
 public enum PanelPlacement {
+    public static func targetScreenFrame(
+        for windowFrame: CGRect,
+        screenFrames: [CGRect]
+    ) -> CGRect? {
+        screenFrames
+            .filter { $0.width > 0 && $0.height > 0 && !$0.isNull && !$0.isInfinite }
+            .max {
+                suitability(of: $0, for: windowFrame)
+                    < suitability(of: $1, for: windowFrame)
+            }
+    }
+
     public static func clampedOrigin(
         _ origin: CGPoint,
         panelSize: CGSize,
@@ -86,11 +176,7 @@ public enum PanelPlacement {
         guard !screens.isEmpty else { return origin }
 
         let proposed = CGRect(origin: origin, size: panelSize)
-        let target =
-            screens.max { lhs, rhs in
-                suitability(of: lhs, for: proposed)
-                    < suitability(of: rhs, for: proposed)
-            } ?? screens[0]
+        let target = targetScreenFrame(for: proposed, screenFrames: screens) ?? screens[0]
 
         let maximumX = max(target.minX, target.maxX - panelSize.width)
         let maximumY = max(target.minY, target.maxY - panelSize.height)

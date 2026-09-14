@@ -1,7 +1,10 @@
+import QuotaOrbitsCore
 import SwiftUI
 
 struct CodexQuotaCard: View {
     let quota: CodexCardPresentation
+    let displayMode: QuotaDisplayMode
+    let visualStyle: QuotaVisualStyle
     var fixedNow: Date?
 
     var body: some View {
@@ -19,8 +22,16 @@ struct CodexQuotaCard: View {
     private func content(now: Date) -> some View {
         VStack(spacing: 5) {
             HStack(spacing: 7) {
-                Text(quota.symbol)
-                    .font(.system(size: 17, weight: .medium, design: .rounded))
+                OpenAIMark()
+                    .frame(
+                        width: ProviderMarkMetrics.canvasSize,
+                        height: ProviderMarkMetrics.canvasSize
+                    )
+                    .foregroundStyle(Color.white.opacity(0.72))
+                    .accessibilityLabel(ProviderHeaderCopy.openAIAccessibilityLabel)
+
+                Text(ProviderHeaderCopy.codexTitle)
+                    .font(.system(size: 14, weight: .semibold, design: .rounded))
                     .foregroundStyle(Color.white.opacity(0.58))
 
                 if let balance = quota.creditsBalance {
@@ -29,36 +40,47 @@ struct CodexQuotaCard: View {
                         .foregroundStyle(Color.white.opacity(0.38))
                         .accessibilityLabel("Credits \(QuotaCopy.credits(balance))")
                 }
-                Spacer()
+                ProviderActiveIndicator(provider: .codex, isActive: quota.isActive)
             }
-
-            QuotaBarView(
-                window: "5 hours",
-                countdown: quota.status.resetCountdown(
-                    window: quota.fiveHour,
-                    now: now
-                ),
-                usedPercent: quota.fiveHour?.usedPercent,
-                dataState: quota.status.barDataState
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(
+                ProviderHeaderCopy.codexAccessibilityLabel(isActive: quota.isActive)
             )
 
-            QuotaBarView(
-                window: "7 days",
-                countdown: quota.status.resetCountdown(
-                    window: quota.weekly,
-                    now: now
-                ),
-                usedPercent: quota.weekly?.usedPercent,
-                dataState: quota.status.barDataState
-            )
+            Group {
+                if visualStyle == .orbits {
+                    HStack(spacing: 6) {
+                        quotaGauge(window: "5 hours", quotaWindow: quota.fiveHour, now: now)
+                        quotaGauge(window: "7 days", quotaWindow: quota.weekly, now: now)
+                    }
+                } else {
+                    quotaGauge(window: "5 hours", quotaWindow: quota.fiveHour, now: now)
+                    quotaGauge(window: "7 days", quotaWindow: quota.weekly, now: now)
+                }
+            }
 
             statusLine(now: now)
         }
         .padding(9)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(maxWidth: .infinity)
         .background(
             RoundedRectangle(cornerRadius: 17, style: .continuous)
                 .fill(Color.white.opacity(0.055))
+        )
+    }
+
+    private func quotaGauge(
+        window: String,
+        quotaWindow: QuotaWindow?,
+        now: Date
+    ) -> some View {
+        QuotaGaugeView(
+            window: window,
+            countdown: quota.status.resetCountdown(window: quotaWindow, now: now),
+            usedPercent: quotaWindow?.usedPercent,
+            dataState: quota.status.barDataState,
+            displayMode: displayMode,
+            visualStyle: visualStyle
         )
     }
 

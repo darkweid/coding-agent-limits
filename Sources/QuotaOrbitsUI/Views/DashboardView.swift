@@ -1,6 +1,117 @@
 import QuotaOrbitsCore
 import SwiftUI
 
+@_spi(Testing)
+public enum DashboardLayout {
+    public static let panelWidth: CGFloat = 350
+    public static let barPanelHeight: CGFloat = 406
+    public static let orbitPanelHeight: CGFloat = 480
+    public static let padding: CGFloat = 12
+    public static let cardSpacing: CGFloat = 8
+    public static let headerHeight: CGFloat = 12
+    public static let barClaudeSectionHeight: CGFloat = 250
+    public static let orbitClaudeSectionHeight: CGFloat = 288
+    public static let nativeBarClaudeSectionHeight: CGFloat = 137
+    public static let nativeOrbitClaudeSectionHeight: CGFloat = 140
+    public static let baseClaudeAccountHeight: CGFloat = 105
+    public static let scopedQuotaRowHeight: CGFloat = 32
+    public static let orbitClaudeAccountHeight: CGFloat = 140
+    public static let barCodexCardHeight: CGFloat = 104
+    public static let orbitCodexCardHeight: CGFloat = 140
+
+    public static func claudeAccountHeight(
+        scopedCount: Int,
+        visualStyle: QuotaVisualStyle = .bars
+    ) -> CGFloat {
+        switch visualStyle {
+        case .bars:
+            baseClaudeAccountHeight
+                + CGFloat(min(max(scopedCount, 0), 1)) * scopedQuotaRowHeight
+        case .orbits:
+            orbitClaudeAccountHeight
+        }
+    }
+
+    public static func requiredClaudeSectionHeight(
+        scopedCounts: [Int],
+        visualStyle: QuotaVisualStyle = .bars
+    ) -> CGFloat {
+        let cards = scopedCounts.map {
+            claudeAccountHeight(scopedCount: $0, visualStyle: visualStyle)
+        }.reduce(0, +)
+        let gaps = CGFloat(max(scopedCounts.count - 1, 0)) * cardSpacing
+        return cards + gaps
+    }
+
+    public static func visibleClaudeSectionHeight(
+        scopedCounts: [Int],
+        visualStyle: QuotaVisualStyle,
+        claudeSourceMode: ClaudeSourceMode
+    ) -> CGFloat {
+        min(
+            requiredClaudeSectionHeight(
+                scopedCounts: scopedCounts,
+                visualStyle: visualStyle
+            ),
+            claudeSectionHeight(
+                for: visualStyle,
+                claudeSourceMode: claudeSourceMode
+            )
+        )
+    }
+
+    public static func minimumCodexCardHeight(visualStyle: QuotaVisualStyle) -> CGFloat {
+        switch visualStyle {
+        case .bars: barCodexCardHeight
+        case .orbits: orbitCodexCardHeight
+        }
+    }
+
+    public static func panelHeight(
+        for visualStyle: QuotaVisualStyle,
+        claudeSourceMode: ClaudeSourceMode = .cswap
+    ) -> CGFloat {
+        if claudeSourceMode == .native {
+            return totalContentHeight(
+                for: visualStyle,
+                claudeSourceMode: claudeSourceMode
+            )
+        }
+        return switch visualStyle {
+        case .bars: barPanelHeight
+        case .orbits: orbitPanelHeight
+        }
+    }
+
+    public static func claudeSectionHeight(
+        for visualStyle: QuotaVisualStyle,
+        claudeSourceMode: ClaudeSourceMode = .cswap
+    ) -> CGFloat {
+        if claudeSourceMode == .native {
+            return switch visualStyle {
+            case .bars: nativeBarClaudeSectionHeight
+            case .orbits: nativeOrbitClaudeSectionHeight
+            }
+        }
+        return switch visualStyle {
+        case .bars: barClaudeSectionHeight
+        case .orbits: orbitClaudeSectionHeight
+        }
+    }
+
+    public static func totalContentHeight(
+        for visualStyle: QuotaVisualStyle,
+        claudeSourceMode: ClaudeSourceMode = .cswap
+    ) -> CGFloat {
+        padding * 2 + headerHeight
+            + claudeSectionHeight(
+                for: visualStyle,
+                claudeSourceMode: claudeSourceMode
+            )
+            + minimumCodexCardHeight(visualStyle: visualStyle) + cardSpacing * 2
+    }
+}
+
 @MainActor
 public final class DashboardActions: ObservableObject {
     @Published public var isPinned: Bool
@@ -26,20 +137,29 @@ public final class DashboardActions: ObservableObject {
 
 public struct DashboardView: View {
     @ObservedObject private var coordinator: QuotaRefreshCoordinator
+    @ObservedObject private var preferences: PanelPreferences
     @ObservedObject private var actions: DashboardActions
 
     @MainActor
     public init(
         coordinator: QuotaRefreshCoordinator,
+        preferences: PanelPreferences,
         actions: DashboardActions
     ) {
         self.coordinator = coordinator
+        self.preferences = preferences
         self.actions = actions
     }
 
     public var body: some View {
         DashboardContentView(
-            presentation: DashboardPresentation(snapshot: coordinator.snapshot),
+            presentation: DashboardPresentation(
+                snapshot: coordinator.snapshot,
+                claudeSourceMode: preferences.claudeSourceMode
+            ),
+            displayMode: preferences.displayMode,
+            visualStyle: preferences.visualStyle,
+            claudeSourceMode: preferences.claudeSourceMode,
             actions: actions
         )
     }
@@ -47,11 +167,14 @@ public struct DashboardView: View {
 
 struct DashboardContentView: View {
     let presentation: DashboardPresentation
+    let displayMode: QuotaDisplayMode
+    let visualStyle: QuotaVisualStyle
+    let claudeSourceMode: ClaudeSourceMode
     @ObservedObject var actions: DashboardActions
     var fixedNow: Date?
 
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: DashboardLayout.cardSpacing) {
             HStack {
                 Spacer()
                 if let date = presentation.lastSuccessfulRefreshAt {
@@ -60,20 +183,47 @@ struct DashboardContentView: View {
                         .foregroundStyle(Color.white.opacity(0.42))
                 }
             }
-            .frame(height: 12)
+            .frame(height: DashboardLayout.headerHeight)
 
-            VStack(spacing: 8) {
-                ForEach(presentation.accounts) { account in
-                    ClaudeAccountCard(account: account, fixedNow: fixedNow)
+            ScrollView(.vertical) {
+                LazyVStack(spacing: DashboardLayout.cardSpacing) {
+                    ForEach(presentation.accounts) { account in
+                        ClaudeAccountCard(
+                            account: account,
+                            displayMode: displayMode,
+                            visualStyle: visualStyle,
+                            fixedNow: fixedNow
+                        )
+                    }
                 }
             }
-            .frame(height: 216)
+            .frame(
+                height: DashboardLayout.visibleClaudeSectionHeight(
+                    scopedCounts: presentation.accounts.map(\.scoped.count),
+                    visualStyle: visualStyle,
+                    claudeSourceMode: claudeSourceMode
+                )
+            )
 
-            CodexQuotaCard(quota: presentation.codex, fixedNow: fixedNow)
-                .frame(height: 104)
+            CodexQuotaCard(
+                quota: presentation.codex,
+                displayMode: displayMode,
+                visualStyle: visualStyle,
+                fixedNow: fixedNow
+            )
+            .frame(
+                minHeight: DashboardLayout.minimumCodexCardHeight(visualStyle: visualStyle),
+                maxHeight: .infinity
+            )
         }
-        .padding(12)
-        .frame(width: 350, height: 372)
+        .padding(DashboardLayout.padding)
+        .frame(
+            width: DashboardLayout.panelWidth,
+            height: DashboardLayout.panelHeight(
+                for: visualStyle,
+                claudeSourceMode: claudeSourceMode
+            )
+        )
         .background(panelBackground)
         .contextMenu {
             let labels = DashboardCopy.contextActions(isPinned: actions.isPinned)
@@ -224,13 +374,21 @@ struct DashboardView_Previews: PreviewProvider {
             preview(snapshot: DashboardPreviewFixtures.longAlias)
                 .previewDisplayName("Long Alias")
         }
-        .previewLayout(.fixed(width: 350, height: 372))
+        .previewLayout(
+            .fixed(
+                width: DashboardLayout.panelWidth,
+                height: DashboardLayout.panelHeight(for: .bars)
+            )
+        )
     }
 
     @MainActor
     private static func preview(snapshot: QuotaSnapshot) -> some View {
         DashboardContentView(
             presentation: DashboardPresentation(snapshot: snapshot),
+            displayMode: .used,
+            visualStyle: .bars,
+            claudeSourceMode: .cswap,
             actions: DashboardActions(
                 isPinned: true,
                 refreshNow: {},

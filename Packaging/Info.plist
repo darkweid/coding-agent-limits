@@ -6,15 +6,17 @@
   <key>CFBundleDevelopmentRegion</key>
   <string>en</string>
   <key>CFBundleDisplayName</key>
-  <string>Quota Orbits</string>
+  <string>Coding Agent Limits</string>
   <key>CFBundleExecutable</key>
   <string>QuotaOrbits</string>
   <key>CFBundleIdentifier</key>
   <string>io.github.darkweid.coding-agent-limits</string>
+  <key>CFBundleIconFile</key>
+  <string>AppIcon</string>
   <key>CFBundleInfoDictionaryVersion</key>
   <string>6.0</string>
   <key>CFBundleName</key>
-  <string>Quota Orbits</string>
+  <string>Coding Agent Limits</string>
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleShortVersionString</key>

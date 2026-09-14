@@ -345,6 +345,11 @@ actor CancellationAwareClaudeSource: ClaudeQuotaFetching {
         }
     }
 
+    func releaseFirstFetch() {
+        firstFetchContinuation?.resume(returning: ())
+        firstFetchContinuation = nil
+    }
+
     private func cancelFirstFetch() {
         guard let firstFetchContinuation else { return }
         self.firstFetchContinuation = nil
@@ -465,14 +470,22 @@ actor ManualRefreshTimeoutScheduler: RefreshTimeoutScheduling {
 final class ManualRefreshTicker: RefreshTicking, @unchecked Sendable {
     private let lock = NSLock()
     private var continuation: AsyncStream<Void>.Continuation?
+    private var intervals: [Duration] = []
 
     func ticks(every interval: Duration) -> AsyncStream<Void> {
         AsyncStream(bufferingPolicy: .bufferingNewest(1)) { continuation in
             lock.lock()
+            intervals.append(interval)
             self.continuation = continuation
             lock.unlock()
             continuation.yield(())
         }
+    }
+
+    var requestedIntervals: [Duration] {
+        lock.lock()
+        defer { lock.unlock() }
+        return intervals
     }
 
     func yield() {

@@ -15,7 +15,8 @@ public enum QuotaCopy {
 
     public static func resetCountdown(window: QuotaWindow?, now: Date) -> String {
         guard let window else { return "no data" }
-        return ResetCountdownFormatter.string(until: window.resetsAt, now: now)
+        guard let resetsAt = window.resetsAt else { return "reset unavailable" }
+        return ResetCountdownFormatter.string(until: resetsAt, now: now)
     }
 
     public static func stale(lastSuccessAt: Date, now: Date) -> String {
@@ -42,6 +43,27 @@ public enum QuotaCopy {
 }
 
 @_spi(Testing)
+public enum QuotaDisplayValue {
+    public static func percent(
+        usedPercent: Double?,
+        mode: QuotaDisplayMode
+    ) -> Double? {
+        guard let usedPercent else { return nil }
+        return switch mode {
+        case .used: usedPercent
+        case .remaining: 100 - usedPercent
+        }
+    }
+
+    public static func label(for mode: QuotaDisplayMode) -> String {
+        switch mode {
+        case .used: "used"
+        case .remaining: "remaining"
+        }
+    }
+}
+
+@_spi(Testing)
 public enum DashboardCopy {
     public static func contextActions(isPinned: Bool) -> [String] {
         [
@@ -50,6 +72,43 @@ public enum DashboardCopy {
             "Settings…",
             "Quit",
         ]
+    }
+}
+
+@_spi(Testing)
+public enum ProviderHeaderCopy {
+    public static let claudeMarkAccessibilityLabel = "Claude"
+    public static let codexTitle = "codex"
+    public static let openAIAccessibilityLabel = "OpenAI"
+
+    public static func claudeAccessibilityLabel(alias: String, isActive: Bool) -> String {
+        let identity = "Claude \(alias)"
+        return isActive ? "\(identity), active account" : identity
+    }
+
+    public static func codexAccessibilityLabel(isActive: Bool) -> String {
+        isActive ? "Codex, active account" : "Codex"
+    }
+}
+
+@_spi(Testing)
+public enum ProviderHeaderLayout {
+    public enum Provider: Equatable, Sendable {
+        case claude
+        case codex
+    }
+
+    public enum ActiveIndicatorPlacement: Equatable, Sendable {
+        case trailing
+    }
+
+    public static func activeIndicatorPlacement(
+        for provider: Provider
+    ) -> ActiveIndicatorPlacement {
+        switch provider {
+        case .claude, .codex:
+            .trailing
+        }
     }
 }
 
@@ -102,12 +161,13 @@ public struct AccountCardPresentation: Identifiable, Equatable {
     public let isActive: Bool
     public let fiveHour: QuotaWindow?
     public let weekly: QuotaWindow?
+    public let scoped: [ClaudeScopedQuota]
     public let status: PresentationStatus
 }
 
 @_spi(Testing)
 public struct CodexCardPresentation: Equatable {
-    public let symbol = "◇"
+    public let isActive: Bool
     public let fiveHour: QuotaWindow?
     public let weekly: QuotaWindow?
     public let creditsBalance: Decimal?
@@ -120,8 +180,15 @@ public struct DashboardPresentation: Equatable {
     public let codex: CodexCardPresentation
     public let lastSuccessfulRefreshAt: Date?
 
-    public init(snapshot: QuotaSnapshot) {
-        accounts = Self.accounts(from: snapshot.claude)
+    public init(
+        snapshot: QuotaSnapshot,
+        claudeSourceMode: ClaudeSourceMode = .cswap
+    ) {
+        let minimumClaudeSlots = claudeSourceMode == .native ? 1 : 2
+        accounts = Self.accounts(
+            from: snapshot.claude,
+            minimumSlots: minimumClaudeSlots
+        )
         codex = Self.codex(from: snapshot.codex)
         lastSuccessfulRefreshAt = [
             Self.successDate(from: snapshot.claude),
@@ -132,48 +199,71 @@ public struct DashboardPresentation: Equatable {
     }
 
     private static func accounts(
-        from source: SourceSnapshot<[ClaudeAccountQuota]>
+        from source: SourceSnapshot<[ClaudeAccountQuota]>,
+        minimumSlots: Int
     ) -> [AccountCardPresentation] {
         switch source {
         case let .available(values, _):
-            return accountCards(values: values, status: .fresh)
+            return accountCards(values: values, minimumSlots: minimumSlots)
         case let .stale(values, lastSuccessAt, _):
-            return accountCards(values: values, status: .stale(lastSuccessAt: lastSuccessAt))
+            return accountCards(
+                values: values,
+                minimumSlots: minimumSlots,
+                sourceStaleAt: lastSuccessAt
+            )
         case .loading:
-            return placeholderAccounts(status: .loading)
+            return placeholderAccounts(count: minimumSlots, status: .loading)
         case .unavailable:
-            return placeholderAccounts(status: .unavailable)
+            return placeholderAccounts(count: minimumSlots, status: .unavailable)
         }
     }
 
     private static func accountCards(
         values: [ClaudeAccountQuota],
-        status: PresentationStatus
+        minimumSlots: Int,
+        sourceStaleAt: Date? = nil
     ) -> [AccountCardPresentation] {
-        var result = values.prefix(2).enumerated().map { index, account in
+        var result = values.enumerated().map { index, account in
             AccountCardPresentation(
                 id: "slot-\(index + 1)",
                 alias: safeAlias(account.alias, slot: index),
                 isActive: account.isActive,
                 fiveHour: account.fiveHour,
                 weekly: account.weekly,
-                status: status
+                scoped: safeScoped(account.scoped),
+                status: accountStatus(account.state, sourceStaleAt: sourceStaleAt)
             )
         }
-        while result.count < 2 {
+        while result.count < minimumSlots {
             let slot = result.count
             result.append(placeholderAccount(slot: slot))
         }
         return result
     }
 
+    private static func accountStatus(
+        _ state: ClaudeAccountQuotaState,
+        sourceStaleAt: Date?
+    ) -> PresentationStatus {
+        switch state {
+        case .unavailable:
+            return .unavailable
+        case .fresh:
+            guard let sourceStaleAt else { return .fresh }
+            return .stale(lastSuccessAt: sourceStaleAt)
+        case let .stale(accountStaleAt):
+            guard let sourceStaleAt else {
+                return .stale(lastSuccessAt: accountStaleAt)
+            }
+            return .stale(lastSuccessAt: min(accountStaleAt, sourceStaleAt))
+        }
+    }
+
     private static func placeholderAccounts(
+        count: Int,
         status: PresentationStatus
     ) -> [AccountCardPresentation] {
-        [
-            placeholderAccount(slot: 0, status: status),
-            placeholderAccount(slot: 1, status: status),
-        ]
+        (0..<count).map { placeholderAccount(slot: $0, status: status) }
     }
 
     private static func placeholderAccount(
@@ -186,6 +276,7 @@ public struct DashboardPresentation: Equatable {
             isActive: false,
             fiveHour: nil,
             weekly: nil,
+            scoped: [],
             status: status
         )
     }
@@ -203,12 +294,32 @@ public struct DashboardPresentation: Equatable {
         return trimmed
     }
 
+    private static func safeScoped(
+        _ values: [ClaudeScopedQuota]
+    ) -> [ClaudeScopedQuota] {
+        let safeValues = values.compactMap { value -> ClaudeScopedQuota? in
+            let label = value.label.trimmingCharacters(in: .whitespacesAndNewlines)
+            let lowered = label.lowercased()
+            guard !label.isEmpty,
+                label.count <= 40,
+                !label.contains("@"),
+                !["claude", "codex"].contains(where: lowered.contains),
+                label.unicodeScalars.allSatisfy({
+                    !CharacterSet.controlCharacters.contains($0)
+                })
+            else { return nil }
+            return ClaudeScopedQuota(label: label, window: value.window)
+        }
+        return Array(safeValues.prefix(1))
+    }
+
     private static func codex(
         from source: SourceSnapshot<CodexQuota>
     ) -> CodexCardPresentation {
         switch source {
         case let .available(value, _):
             CodexCardPresentation(
+                isActive: true,
                 fiveHour: value.fiveHour,
                 weekly: value.weekly,
                 creditsBalance: value.creditsBalance,
@@ -216,6 +327,7 @@ public struct DashboardPresentation: Equatable {
             )
         case let .stale(value, lastSuccessAt, _):
             CodexCardPresentation(
+                isActive: true,
                 fiveHour: value.fiveHour,
                 weekly: value.weekly,
                 creditsBalance: value.creditsBalance,
@@ -223,6 +335,7 @@ public struct DashboardPresentation: Equatable {
             )
         case .loading:
             CodexCardPresentation(
+                isActive: false,
                 fiveHour: nil,
                 weekly: nil,
                 creditsBalance: nil,
@@ -230,6 +343,7 @@ public struct DashboardPresentation: Equatable {
             )
         case .unavailable:
             CodexCardPresentation(
+                isActive: false,
                 fiveHour: nil,
                 weekly: nil,
                 creditsBalance: nil,

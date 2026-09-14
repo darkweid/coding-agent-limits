@@ -6,18 +6,38 @@ public enum ExecutablePathResolver {
         userLocalExecutable(named: "cswap", homeDirectory: homeDirectory)
     }
 
+    public static func defaultClaudePath(
+        homeDirectory: URL,
+        isExecutable: (String) -> Bool
+    ) -> String {
+        preferredExecutablePath(
+            named: "claude",
+            homeDirectory: homeDirectory,
+            isExecutable: isExecutable
+        )
+    }
+
     public static func defaultCodexPath(
         homeDirectory: URL,
         isExecutable: (String) -> Bool
     ) -> String {
-        let userLocalPath = userLocalExecutable(
+        preferredExecutablePath(
             named: "codex",
-            homeDirectory: homeDirectory
+            homeDirectory: homeDirectory,
+            isExecutable: isExecutable
         )
+    }
+
+    private static func preferredExecutablePath(
+        named name: String,
+        homeDirectory: URL,
+        isExecutable: (String) -> Bool
+    ) -> String {
+        let userLocalPath = userLocalExecutable(named: name, homeDirectory: homeDirectory)
         let candidates = [
             userLocalPath,
-            "/opt/homebrew/bin/codex",
-            "/usr/local/bin/codex",
+            "/opt/homebrew/bin/\(name)",
+            "/usr/local/bin/\(name)",
         ]
         return candidates.first(where: isExecutable) ?? userLocalPath
     }

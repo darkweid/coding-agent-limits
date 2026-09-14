@@ -49,7 +49,7 @@ enum CodexAppServerClientTests {
             try TestSupport.assertEqual(sent[0].method, "initialize")
             try TestSupport.assertEqual(sent[0].id, 1)
             try TestSupport.assertEqual(sent[0].clientName, "quota_orbits")
-            try TestSupport.assertEqual(sent[0].clientTitle, "Quota Orbits")
+            try TestSupport.assertEqual(sent[0].clientTitle, "Coding Agent Limits")
             try TestSupport.assertEqual(sent[0].clientVersion, "0.1.0")
             try TestSupport.assertEqual(sent[1].method, "initialized")
             try TestSupport.assertEqual(sent[1].id, nil)

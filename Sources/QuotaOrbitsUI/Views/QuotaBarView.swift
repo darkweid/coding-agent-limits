@@ -19,7 +19,9 @@ public enum QuotaBarAccessibility {
     public static func value(
         window: String,
         used: Double?,
-        dataState: QuotaBarDataState
+        countdown: String,
+        dataState: QuotaBarDataState,
+        displayMode: QuotaDisplayMode = .used
     ) -> String {
         switch dataState {
         case .loading:
@@ -28,7 +30,12 @@ public enum QuotaBarAccessibility {
             return "\(window), no data"
         case .available:
             guard let used else { return "\(window), no data" }
-            return "\(window), \(QuotaCopy.percent(used)) used"
+            let displayPercent = QuotaDisplayValue.percent(
+                usedPercent: used,
+                mode: displayMode
+            )
+            return
+                "\(window), \(QuotaCopy.percent(displayPercent)) \(QuotaDisplayValue.label(for: displayMode)), \(countdown)"
         }
     }
 }
@@ -38,6 +45,7 @@ struct QuotaBarView: View {
     let countdown: String
     let usedPercent: Double?
     let dataState: QuotaBarDataState
+    let displayMode: QuotaDisplayMode
 
     var body: some View {
         VStack(spacing: 4) {
@@ -50,7 +58,7 @@ struct QuotaBarView: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.72)
                 Spacer(minLength: 4)
-                Text(QuotaCopy.percent(usedPercent))
+                Text(QuotaCopy.percent(displayPercent))
                     .fontWeight(.semibold)
                     .foregroundStyle(levelColor)
             }
@@ -64,7 +72,7 @@ struct QuotaBarView: View {
                         .fill(levelColor)
                         .frame(
                             width: geometry.size.width
-                                * QuotaBarMetrics.normalized(usedPercent)
+                                * QuotaBarMetrics.normalized(displayPercent)
                                 / 100
                         )
                 }
@@ -72,12 +80,14 @@ struct QuotaBarView: View {
             .frame(height: 7)
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Quota used")
+        .accessibilityLabel("Quota \(QuotaDisplayValue.label(for: displayMode))")
         .accessibilityValue(
             QuotaBarAccessibility.value(
                 window: window,
                 used: usedPercent,
-                dataState: dataState
+                countdown: countdown,
+                dataState: dataState,
+                displayMode: displayMode
             )
         )
     }
@@ -86,5 +96,9 @@ struct QuotaBarView: View {
         QuotaPalette.color(
             for: QuotaLevel.classify(usedPercent: usedPercent)
         )
+    }
+
+    private var displayPercent: Double? {
+        QuotaDisplayValue.percent(usedPercent: usedPercent, mode: displayMode)
     }
 }
