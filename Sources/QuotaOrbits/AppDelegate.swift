@@ -171,6 +171,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             controller = SettingsWindowController(rootView: settingsView)
             settingsWindowController = controller
         }
-        controller.present()
+        controller.present(on: panelController?.currentScreenVisibleFrame)
     }
 }

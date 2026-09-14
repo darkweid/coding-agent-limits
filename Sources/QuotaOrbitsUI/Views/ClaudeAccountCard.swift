@@ -35,13 +35,7 @@ struct ClaudeAccountCard: View {
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .minimumScaleFactor(0.72)
-                Spacer(minLength: 2)
-                if account.isActive {
-                    Circle()
-                        .fill(QuotaPalette.color(for: .healthy))
-                        .frame(width: 6, height: 6)
-                        .accessibilityLabel("Active account")
-                }
+                ProviderActiveIndicator(provider: .claude, isActive: account.isActive)
             }
             .accessibilityElement(children: .combine)
             .accessibilityLabel(

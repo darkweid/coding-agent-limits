@@ -98,6 +98,16 @@ enum QuotaPresentationTests {
             try TestSupport.assertEqual(ProviderMarkMetrics.openAILobeOffset, 2.5)
             try TestSupport.assertEqual(ProviderMarkMetrics.openAIOuterRadius, 7.5)
         },
+        TestCase(name: "QuotaPresentationTests.testActiveIndicatorsUseTrailingPlacement") {
+            try TestSupport.assertEqual(
+                ProviderHeaderLayout.activeIndicatorPlacement(for: .claude),
+                .trailing
+            )
+            try TestSupport.assertEqual(
+                ProviderHeaderLayout.activeIndicatorPlacement(for: .codex),
+                .trailing
+            )
+        },
         TestCase(name: "QuotaPresentationTests.testOrbitGaugeUsesProminentDiameter") {
             try TestSupport.assertEqual(QuotaOrbitMetrics.diameter, 55.2)
             try TestSupport.assertEqual(
@@ -134,6 +144,25 @@ enum QuotaPresentationTests {
             try TestSupport.assertEqual(
                 panelHeight,
                 DashboardLayout.panelHeight(for: .bars)
+            )
+        },
+        TestCase(name: "QuotaPresentationTests.testVisibleCardsUseUniformVerticalSpacing") {
+            try TestSupport.assertEqual(DashboardLayout.cardSpacing, 8)
+            try TestSupport.assertEqual(
+                DashboardLayout.visibleClaudeSectionHeight(
+                    scopedCounts: [0, 0],
+                    visualStyle: .bars,
+                    claudeSourceMode: .cswap
+                ),
+                218
+            )
+            try TestSupport.assertEqual(
+                DashboardLayout.visibleClaudeSectionHeight(
+                    scopedCounts: [0, 0, 0, 0],
+                    visualStyle: .bars,
+                    claudeSourceMode: .cswap
+                ),
+                250
             )
         },
         TestCase(

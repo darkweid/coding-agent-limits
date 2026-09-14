@@ -7,13 +7,12 @@ public enum DashboardLayout {
     public static let barPanelHeight: CGFloat = 406
     public static let orbitPanelHeight: CGFloat = 480
     public static let padding: CGFloat = 12
-    public static let sectionSpacing: CGFloat = 8
+    public static let cardSpacing: CGFloat = 8
     public static let headerHeight: CGFloat = 12
     public static let barClaudeSectionHeight: CGFloat = 250
     public static let orbitClaudeSectionHeight: CGFloat = 288
     public static let nativeBarClaudeSectionHeight: CGFloat = 137
     public static let nativeOrbitClaudeSectionHeight: CGFloat = 140
-    public static let claudeAccountSpacing: CGFloat = 8
     public static let baseClaudeAccountHeight: CGFloat = 105
     public static let scopedQuotaRowHeight: CGFloat = 32
     public static let orbitClaudeAccountHeight: CGFloat = 140
@@ -40,8 +39,25 @@ public enum DashboardLayout {
         let cards = scopedCounts.map {
             claudeAccountHeight(scopedCount: $0, visualStyle: visualStyle)
         }.reduce(0, +)
-        let gaps = CGFloat(max(scopedCounts.count - 1, 0)) * claudeAccountSpacing
+        let gaps = CGFloat(max(scopedCounts.count - 1, 0)) * cardSpacing
         return cards + gaps
+    }
+
+    public static func visibleClaudeSectionHeight(
+        scopedCounts: [Int],
+        visualStyle: QuotaVisualStyle,
+        claudeSourceMode: ClaudeSourceMode
+    ) -> CGFloat {
+        min(
+            requiredClaudeSectionHeight(
+                scopedCounts: scopedCounts,
+                visualStyle: visualStyle
+            ),
+            claudeSectionHeight(
+                for: visualStyle,
+                claudeSourceMode: claudeSourceMode
+            )
+        )
     }
 
     public static func minimumCodexCardHeight(visualStyle: QuotaVisualStyle) -> CGFloat {
@@ -92,7 +108,7 @@ public enum DashboardLayout {
                 for: visualStyle,
                 claudeSourceMode: claudeSourceMode
             )
-            + minimumCodexCardHeight(visualStyle: visualStyle) + sectionSpacing * 2
+            + minimumCodexCardHeight(visualStyle: visualStyle) + cardSpacing * 2
     }
 }
 
@@ -158,7 +174,7 @@ struct DashboardContentView: View {
     var fixedNow: Date?
 
     var body: some View {
-        VStack(spacing: DashboardLayout.sectionSpacing) {
+        VStack(spacing: DashboardLayout.cardSpacing) {
             HStack {
                 Spacer()
                 if let date = presentation.lastSuccessfulRefreshAt {
@@ -170,7 +186,7 @@ struct DashboardContentView: View {
             .frame(height: DashboardLayout.headerHeight)
 
             ScrollView(.vertical) {
-                LazyVStack(spacing: DashboardLayout.claudeAccountSpacing) {
+                LazyVStack(spacing: DashboardLayout.cardSpacing) {
                     ForEach(presentation.accounts) { account in
                         ClaudeAccountCard(
                             account: account,
@@ -189,8 +205,9 @@ struct DashboardContentView: View {
                 }
             }
             .frame(
-                height: DashboardLayout.claudeSectionHeight(
-                    for: visualStyle,
+                height: DashboardLayout.visibleClaudeSectionHeight(
+                    scopedCounts: presentation.accounts.map(\.scoped.count),
+                    visualStyle: visualStyle,
                     claudeSourceMode: claudeSourceMode
                 )
             )

@@ -92,6 +92,27 @@ public enum ProviderHeaderCopy {
 }
 
 @_spi(Testing)
+public enum ProviderHeaderLayout {
+    public enum Provider: Equatable, Sendable {
+        case claude
+        case codex
+    }
+
+    public enum ActiveIndicatorPlacement: Equatable, Sendable {
+        case trailing
+    }
+
+    public static func activeIndicatorPlacement(
+        for provider: Provider
+    ) -> ActiveIndicatorPlacement {
+        switch provider {
+        case .claude, .codex:
+            .trailing
+        }
+    }
+}
+
+@_spi(Testing)
 public enum PresentationStatus: Equatable {
     case loading
     case fresh

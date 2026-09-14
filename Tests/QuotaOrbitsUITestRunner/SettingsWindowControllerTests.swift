@@ -25,6 +25,25 @@ enum SettingsWindowControllerTests {
 
                 controller.close()
             }
-        }
+        },
+        TestCase(name: "SettingsWindowControllerTests.testPresentCentersOnRequestedScreen") {
+            try await MainActor.run {
+                _ = NSApplication.shared
+                let controller = SettingsWindowController(
+                    rootView: Text("Settings fixture")
+                )
+                let secondaryScreen = CGRect(x: 1_920, y: 100, width: 1_440, height: 900)
+
+                controller.present(on: secondaryScreen)
+
+                guard let frame = controller.window?.frame else {
+                    throw AssertionFailure(message: "Expected a settings window")
+                }
+                try TestSupport.assertEqual(frame.midX, secondaryScreen.midX)
+                try TestSupport.assertEqual(frame.midY, secondaryScreen.midY)
+                try TestSupport.assertTrue(secondaryScreen.contains(frame))
+                controller.close()
+            }
+        },
     ]
 }

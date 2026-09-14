@@ -34,20 +34,13 @@ struct CodexQuotaCard: View {
                     .font(.system(size: 14, weight: .semibold, design: .rounded))
                     .foregroundStyle(Color.white.opacity(0.58))
 
-                if quota.isActive {
-                    Circle()
-                        .fill(QuotaPalette.color(for: .healthy))
-                        .frame(width: 6, height: 6)
-                        .accessibilityLabel("Active account")
-                }
-
                 if let balance = quota.creditsBalance {
                     Text("credits \(QuotaCopy.credits(balance))")
                         .font(.system(size: 10, weight: .medium, design: .rounded))
                         .foregroundStyle(Color.white.opacity(0.38))
                         .accessibilityLabel("Credits \(QuotaCopy.credits(balance))")
                 }
-                Spacer()
+                ProviderActiveIndicator(provider: .codex, isActive: quota.isActive)
             }
             .accessibilityElement(children: .combine)
             .accessibilityLabel(

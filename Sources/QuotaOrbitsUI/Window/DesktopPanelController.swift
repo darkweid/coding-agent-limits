@@ -95,6 +95,13 @@ public final class DesktopPanelController: NSObject, NSWindowDelegate {
         )
     }
 
+    public var currentScreenVisibleFrame: CGRect? {
+        PanelPlacement.targetScreenFrame(
+            for: panel.frame,
+            screenFrames: screenFrames()
+        )
+    }
+
     private let preferences: PanelPreferences
     private let actions: DashboardActions
     private let panel: NSPanel

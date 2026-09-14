@@ -153,6 +153,18 @@ public final class PanelPreferences: ObservableObject {
 
 @_spi(Testing)
 public enum PanelPlacement {
+    public static func targetScreenFrame(
+        for windowFrame: CGRect,
+        screenFrames: [CGRect]
+    ) -> CGRect? {
+        screenFrames
+            .filter { $0.width > 0 && $0.height > 0 && !$0.isNull && !$0.isInfinite }
+            .max {
+                suitability(of: $0, for: windowFrame)
+                    < suitability(of: $1, for: windowFrame)
+            }
+    }
+
     public static func clampedOrigin(
         _ origin: CGPoint,
         panelSize: CGSize,
@@ -164,11 +176,7 @@ public enum PanelPlacement {
         guard !screens.isEmpty else { return origin }
 
         let proposed = CGRect(origin: origin, size: panelSize)
-        let target =
-            screens.max { lhs, rhs in
-                suitability(of: lhs, for: proposed)
-                    < suitability(of: rhs, for: proposed)
-            } ?? screens[0]
+        let target = targetScreenFrame(for: proposed, screenFrames: screens) ?? screens[0]
 
         let maximumX = max(target.minX, target.maxX - panelSize.width)
         let maximumY = max(target.minY, target.maxY - panelSize.height)
