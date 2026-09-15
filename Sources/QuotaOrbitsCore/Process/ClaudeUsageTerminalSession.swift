@@ -67,8 +67,8 @@ public struct ClaudeUsageTerminalConversation: Sendable {
 
     public mutating func receive(_ data: Data) -> ClaudeUsageTerminalAction? {
         tail.append(data)
-        if tail.count > 1_024 {
-            tail = tail.suffix(1_024)
+        if tail.count > 8_192 {
+            tail = tail.suffix(8_192)
         }
         let decoded = String(decoding: tail, as: UTF8.self)
         let searchable = Self.searchableText(decoded)
@@ -94,6 +94,9 @@ public struct ClaudeUsageTerminalConversation: Sendable {
         where searchable.contains("usageendpointisratelimited"):
             phase = .complete
             return .usageUnavailable
+        case .waitingForUsage where Self.hasCompleteUsageSummary(searchable):
+            phase = .complete
+            return .usageComplete
         case .waitingForPrompt, .waitingForTrustSubmission, .waitingForPromptAfterTrust,
             .waitingForUsage, .complete:
             return nil
@@ -126,6 +129,13 @@ public struct ClaudeUsageTerminalConversation: Sendable {
             CharacterSet.alphanumerics.contains($0)
         }
         return String(String.UnicodeScalarView(scalars)).lowercased()
+    }
+
+    private static func hasCompleteUsageSummary(_ value: String) -> Bool {
+        value.contains("currentsession")
+            && value.contains("currentweekallmodels")
+            && value.components(separatedBy: "used").count >= 3
+            && value.components(separatedBy: "resets").count >= 3
     }
 }
 
@@ -223,7 +233,13 @@ private final class PTYSessionState: @unchecked Sendable {
         }
         var masterDescriptor: Int32 = -1
         var slaveDescriptor: Int32 = -1
-        guard openpty(&masterDescriptor, &slaveDescriptor, nil, nil, nil) == 0 else {
+        var windowSize = winsize(
+            ws_row: 60,
+            ws_col: 120,
+            ws_xpixel: 0,
+            ws_ypixel: 0
+        )
+        guard openpty(&masterDescriptor, &slaveDescriptor, nil, nil, &windowSize) == 0 else {
             throw ClaudeUsageTerminalError.launchFailed
         }
 
