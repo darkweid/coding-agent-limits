@@ -60,7 +60,7 @@ enum ClaudeNativeQuotaSourceTests {
             _ = conversation.receive(Data("❯".utf8))
             let pendingInsights = String(
                 repeating: "Scanning local sessions…\n",
-                count: 80
+                count: 400
             )
 
             try TestSupport.assertEqual(
@@ -75,6 +75,19 @@ enum ClaudeNativeQuotaSourceTests {
                         Resets Sep 21 at 3am (Asia/Tashkent)
                         \(pendingInsights)
                         Refreshing…
+                        """.utf8
+                    )
+                ),
+                nil
+            )
+            try TestSupport.assertEqual(
+                conversation.receive(
+                    Data(
+                        """
+                        Current week (Fable)
+                        0% used
+                        Resets Sep 21 at 3am (Asia/Tashkent)
+                        Usage credits are off
                         Esc to cancel
                         """.utf8
                     )

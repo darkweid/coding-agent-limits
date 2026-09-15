@@ -62,16 +62,25 @@ public struct ClaudeUsageTerminalConversation: Sendable {
 
     private var phase = Phase.waitingForPrompt
     private var tail = Data()
+    private var observedBaseUsageSummary = false
+    private var observedCurrentUsagePageTail = false
 
     public init() {}
 
     public mutating func receive(_ data: Data) -> ClaudeUsageTerminalAction? {
         tail.append(data)
+        let decoded = String(decoding: tail, as: UTF8.self)
+        let searchable = Self.searchableText(decoded)
+        if phase == .waitingForUsage {
+            observedBaseUsageSummary =
+                observedBaseUsageSummary || Self.hasCompleteUsageSummary(searchable)
+            observedCurrentUsagePageTail =
+                observedCurrentUsagePageTail
+                || (searchable.contains("usagecredits") && searchable.contains("esctocancel"))
+        }
         if tail.count > 8_192 {
             tail = tail.suffix(8_192)
         }
-        let decoded = String(decoding: tail, as: UTF8.self)
-        let searchable = Self.searchableText(decoded)
 
         switch phase {
         case .waitingForPrompt where Self.isWorkspaceTrustScreen(searchable, raw: decoded):
@@ -94,7 +103,7 @@ public struct ClaudeUsageTerminalConversation: Sendable {
         where searchable.contains("usageendpointisratelimited"):
             phase = .complete
             return .usageUnavailable
-        case .waitingForUsage where Self.hasCompleteUsageSummary(searchable):
+        case .waitingForUsage where observedBaseUsageSummary && observedCurrentUsagePageTail:
             phase = .complete
             return .usageComplete
         case .waitingForPrompt, .waitingForTrustSubmission, .waitingForPromptAfterTrust,

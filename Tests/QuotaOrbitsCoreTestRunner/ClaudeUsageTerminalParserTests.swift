@@ -80,12 +80,37 @@ enum ClaudeUsageTerminalParserTests {
             try TestSupport.assertEqual(usage.fiveHour?.usedPercent, 21)
             try TestSupport.assertEqual(usage.weekly?.usedPercent, 2)
         },
+        TestCase(name: "ClaudeUsageTerminalParserTests.testRejectsUnknownOSCCommand") {
+            let transcript = Data(
+                """
+                \u{1B}]52;c;clipboard-payload\u{7}
+                Current session
+                21% used
+                Resets 6:20pm (Asia/Tashkent)
+                Current week (all models)
+                2% used
+                Resets Sep 21 at 3am (Asia/Tashkent)
+                """.utf8
+            )
+
+            try await TestSupport.assertThrowsErrorAsync(
+                try ClaudeUsageTerminalParser().parse(
+                    transcript,
+                    now: Date(timeIntervalSince1970: 1_789_467_600)
+                )
+            ) { error in
+                try TestSupport.assertEqual(
+                    error as? ClaudeUsageTerminalParseError,
+                    .invalidResponse
+                )
+            }
+        },
         TestCase(name: "ClaudeUsageTerminalParserTests.testRestoresCursorPositionedSpacing") {
             let transcript = Data(
                 """
                 Current\u{1B}[12Gsession
                 21%\u{1B}[59Gused
-                Resets\u{1B}[11G6:20pm\u{1B}[18G(Asia/Tashkent)
+                Resets\u{1B}[11G6pm\u{1B}[18G(Asia/Tashkent)
                 Current\u{1B}[12Gweek\u{1B}[17G(all\u{1B}[22Gmodels)
                 2%\u{1B}[58Gused
                 Resets\u{1B}[11GSep\u{1B}[15G21\u{1B}[18Gat\u{1B}[21G3am\u{1B}[25G(Asia/Tashkent)
