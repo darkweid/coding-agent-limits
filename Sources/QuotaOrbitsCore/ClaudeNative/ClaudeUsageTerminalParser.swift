@@ -82,16 +82,40 @@ public struct ClaudeUsageTerminalParser: Sendable {
     }
 
     private func sanitized(_ value: String) throws -> String {
-        let ansiPattern = "\u{001B}\\[[0-?]*[ -/]*[@-~]"
-        guard let regex = try? NSRegularExpression(pattern: ansiPattern) else {
+        guard
+            let horizontalPositioning = try? NSRegularExpression(
+                pattern: "\u{001B}\\[[0-9;?]*[CG]"
+            )
+        else {
             throw ClaudeUsageTerminalParseError.invalidResponse
         }
-        let range = NSRange(value.startIndex..<value.endIndex, in: value)
-        let stripped = regex.stringByReplacingMatches(
+        let positioningRange = NSRange(value.startIndex..<value.endIndex, in: value)
+        var stripped = horizontalPositioning.stringByReplacingMatches(
             in: value,
-            range: range,
-            withTemplate: ""
+            range: positioningRange,
+            withTemplate: " "
         )
+        let safeTerminalPatterns = [
+            "\u{001B}\\](?:0|2);[^\u{0007}\u{001B}]*(?:\u{0007}|\u{001B}\\\\)",
+            "\u{001B}\\[[0-?]*[ -/]*[@-~]",
+            "\u{001B}[()][0-2A-Z]",
+            "\u{001B}[78]",
+        ]
+        for pattern in safeTerminalPatterns {
+            guard let regex = try? NSRegularExpression(pattern: pattern) else {
+                throw ClaudeUsageTerminalParseError.invalidResponse
+            }
+            let range = NSRange(stripped.startIndex..<stripped.endIndex, in: stripped)
+            stripped = regex.stringByReplacingMatches(
+                in: stripped,
+                range: range,
+                withTemplate: ""
+            )
+        }
+        stripped =
+            stripped
+            .replacingOccurrences(of: "\u{000E}", with: "")
+            .replacingOccurrences(of: "\u{000F}", with: "")
         for scalar in stripped.unicodeScalars {
             if scalar.value == 0x1B {
                 throw ClaudeUsageTerminalParseError.invalidResponse
@@ -146,7 +170,7 @@ public struct ClaudeUsageTerminalParser: Sendable {
         let calendar = Calendar(identifier: .gregorian)
         let year = calendar.dateComponents(in: timeZone, from: now).year
 
-        for format in ["MMM d 'at' h:mma", "MMM d, h:mma"] {
+        for format in ["MMM d 'at' h:mma", "MMM d 'at' ha", "MMM d, h:mma"] {
             guard let year else { continue }
             let formatter = DateFormatter()
             formatter.locale = Locale(identifier: "en_US_POSIX")
@@ -158,19 +182,22 @@ public struct ClaudeUsageTerminalParser: Sendable {
             }
         }
 
-        let timeFormatter = DateFormatter()
-        timeFormatter.locale = Locale(identifier: "en_US_POSIX")
-        timeFormatter.timeZone = timeZone
-        timeFormatter.dateFormat = "h:mma"
-        guard let time = timeFormatter.date(from: value) else { return nil }
-        var components = calendar.dateComponents(in: timeZone, from: now)
-        let timeComponents = calendar.dateComponents(in: timeZone, from: time)
-        components.hour = timeComponents.hour
-        components.minute = timeComponents.minute
-        components.second = 0
-        guard let today = calendar.date(from: components) else { return nil }
-        if today > now { return today }
-        return calendar.date(byAdding: .day, value: 1, to: today)
+        for format in ["h:mma", "ha"] {
+            let timeFormatter = DateFormatter()
+            timeFormatter.locale = Locale(identifier: "en_US_POSIX")
+            timeFormatter.timeZone = timeZone
+            timeFormatter.dateFormat = format
+            guard let time = timeFormatter.date(from: value) else { continue }
+            var components = calendar.dateComponents(in: timeZone, from: now)
+            let timeComponents = calendar.dateComponents(in: timeZone, from: time)
+            components.hour = timeComponents.hour
+            components.minute = timeComponents.minute
+            components.second = 0
+            guard let today = calendar.date(from: components) else { return nil }
+            if today > now { return today }
+            return calendar.date(byAdding: .day, value: 1, to: today)
+        }
+        return nil
     }
 
     private func isValidLabel(_ value: String) -> Bool {

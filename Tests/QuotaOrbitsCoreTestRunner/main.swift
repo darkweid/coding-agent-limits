@@ -24,6 +24,27 @@ if arguments == ["--emit-large-payload"] {
         }
     }
     exit(0)
+} else if arguments == ["--emit-terminal-size-usage-pty"] {
+    var size = winsize()
+    guard ioctl(STDOUT_FILENO, TIOCGWINSZ, &size) == 0 else { exit(3) }
+    print("viewport \(size.ws_row)x\(size.ws_col)")
+    print("❯")
+    fflush(stdout)
+    while let line = readLine() {
+        if line == "/usage" {
+            print("Current session")
+            print("9% used")
+            print("Resets 11:59pm (UTC)")
+            print("Current week (all models)")
+            print("20% used")
+            print("Resets Aug 14 at 10:59am (UTC)")
+            print("Esc to exit")
+            fflush(stdout)
+        } else if line == "/exit" {
+            exit(0)
+        }
+    }
+    exit(0)
 } else if arguments == ["--emit-trust-usage-pty"] {
     print("Workspace trust security")
     print("❯ Yes, I trust this folder")

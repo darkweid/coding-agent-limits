@@ -53,6 +53,48 @@ enum ClaudeNativeQuotaSourceTests {
                 .usageUnavailable
             )
         },
+        TestCase(
+            name: "ClaudeNativeQuotaSourceTests.testUsageConversationCompletesWhileInsightsRefresh"
+        ) {
+            var conversation = ClaudeUsageTerminalConversation()
+            _ = conversation.receive(Data("❯".utf8))
+            let pendingInsights = String(
+                repeating: "Scanning local sessions…\n",
+                count: 400
+            )
+
+            try TestSupport.assertEqual(
+                conversation.receive(
+                    Data(
+                        """
+                        Current session
+                        21% used
+                        Resets 6:20pm (Asia/Tashkent)
+                        Current week (all models)
+                        2% used
+                        Resets Sep 21 at 3am (Asia/Tashkent)
+                        \(pendingInsights)
+                        Refreshing…
+                        """.utf8
+                    )
+                ),
+                nil
+            )
+            try TestSupport.assertEqual(
+                conversation.receive(
+                    Data(
+                        """
+                        Current week (Fable)
+                        0% used
+                        Resets Sep 21 at 3am (Asia/Tashkent)
+                        Usage credits are off
+                        Esc to cancel
+                        """.utf8
+                    )
+                ),
+                .usageComplete
+            )
+        },
         TestCase(name: "ClaudeNativeQuotaSourceTests.testRealPTYHandlesWorkspaceTrust") {
             let transcript = try await ClaudeUsageTerminalSession().captureUsage(
                 executable: URL(fileURLWithPath: CommandLine.arguments[0]),
@@ -78,6 +120,20 @@ enum ClaudeNativeQuotaSourceTests {
 
             try TestSupport.assertEqual(
                 String(decoding: transcript, as: UTF8.self).contains("Current week (all models)"),
+                true
+            )
+        },
+        TestCase(name: "ClaudeNativeQuotaSourceTests.testRealPTYUsesStableViewport") {
+            let transcript = try await ClaudeUsageTerminalSession().captureUsage(
+                executable: URL(fileURLWithPath: CommandLine.arguments[0]),
+                arguments: ["--emit-terminal-size-usage-pty"],
+                workingDirectory: FileManager.default.temporaryDirectory,
+                timeout: .seconds(2),
+                maximumOutputBytes: ClaudeUsageTerminalParser.maximumOutputBytes
+            )
+
+            try TestSupport.assertEqual(
+                String(decoding: transcript, as: UTF8.self).contains("viewport 60x120"),
                 true
             )
         },
