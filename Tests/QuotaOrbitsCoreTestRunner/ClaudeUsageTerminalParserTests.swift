@@ -3,6 +3,29 @@ import QuotaOrbitsCore
 
 enum ClaudeUsageTerminalParserTests {
     static let cases: [TestCase] = [
+        TestCase(
+            name: "ClaudeUsageTerminalParserTests.testAcceptsCapabilityProbeWithWeeklyOnlyUsage"
+        ) {
+            for terminator in ["\u{7}", "\u{1B}\\"] {
+                let transcript = Data(
+                    """
+                    \u{1B}]7501;?\(terminator)
+                    Current week (all models)
+                    17% used
+                    Resets Aug 14 at 3am (UTC)
+                    Current week (Fable)
+                    8% used
+                    Usage credits are off
+                    Esc to cancel
+                    """.utf8)
+                let usage = try ClaudeUsageTerminalParser().parse(
+                    transcript, now: Date(timeIntervalSince1970: 1_786_335_600)
+                )
+                try TestSupport.assertEqual(usage.fiveHour, nil)
+                try TestSupport.assertEqual(usage.weekly?.usedPercent, 17)
+                try TestSupport.assertEqual(usage.scoped.map(\.window.usedPercent), [8])
+            }
+        },
         TestCase(name: "ClaudeUsageTerminalParserTests.testParsesBaseAndScopedUsageRows") {
             let transcript = Data(
                 """
