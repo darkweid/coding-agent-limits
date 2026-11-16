@@ -8,6 +8,59 @@ enum QuotaPresentationTests {
     private static let now = Date(timeIntervalSince1970: 1_000_000)
 
     static let cases: [TestCase] = [
+        TestCase(name: "QuotaPresentationTests.testFiveHourVisibilityPreservesZeroAndPlaceholders")
+        {
+            let states: [(PresentationStatus, Bool)] = [
+                (.loading, true), (.fresh, false), (.stale(lastSuccessAt: now), false),
+                (.unavailable, true),
+            ]
+            for (status, showsMissingWindow) in states {
+                let missing = AccountCardPresentation(
+                    id: "slot-1", alias: "primary", isActive: true,
+                    fiveHour: nil, weekly: window(remaining: 96), scoped: [], status: status
+                )
+                try TestSupport.assertEqual(missing.showsFiveHour, showsMissingWindow)
+                let zeroUsage = AccountCardPresentation(
+                    id: "slot-1", alias: "primary", isActive: true,
+                    fiveHour: window(remaining: 100), weekly: window(remaining: 96), scoped: [],
+                    status: status
+                )
+                try TestSupport.assertTrue(zeroUsage.showsFiveHour)
+            }
+            try TestSupport.assertEqual(
+                DashboardLayout.visibleClaudeSectionHeight(
+                    scopedCounts: [1, 0], hiddenFiveHourCount: 1,
+                    visualStyle: .bars, claudeSourceMode: .cswap
+                ),
+                218
+            )
+            try TestSupport.assertEqual(
+                DashboardLayout.visibleClaudeSectionHeight(
+                    scopedCounts: [1, 0], hiddenFiveHourCount: 1,
+                    visualStyle: .orbits, claudeSourceMode: .cswap
+                ),
+                288
+            )
+        },
+        TestCase(name: "QuotaPresentationTests.testAbsentFiveHourCompactsClaudeCard") {
+            try await MainActor.run {
+                for status in [PresentationStatus.fresh, .stale(lastSuccessAt: now)] {
+                    let account = AccountCardPresentation(
+                        id: "slot-1", alias: "primary", isActive: true,
+                        fiveHour: nil, weekly: window(remaining: 96), scoped: [], status: status
+                    )
+                    let host = NSHostingView(
+                        rootView: ClaudeAccountCard(
+                            account: account, displayMode: .used, visualStyle: .bars, fixedNow: now
+                        ))
+                    try TestSupport.assertEqual(
+                        host.fittingSize.height,
+                        DashboardLayout.baseClaudeAccountHeight
+                            - DashboardLayout.scopedQuotaRowHeight
+                    )
+                }
+            }
+        },
         TestCase(name: "QuotaPresentationTests.testQuotaCopyFormatsValuesForDisplay") {
             guard let credits = Decimal(string: "411.5127706250") else {
                 throw AssertionFailure(message: "Could not create the credits fixture")

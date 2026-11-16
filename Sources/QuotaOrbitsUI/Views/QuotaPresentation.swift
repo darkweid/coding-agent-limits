@@ -163,6 +163,10 @@ public struct AccountCardPresentation: Identifiable, Equatable {
     public let weekly: QuotaWindow?
     public let scoped: [ClaudeScopedQuota]
     public let status: PresentationStatus
+
+    public var showsFiveHour: Bool {
+        fiveHour != nil || status == .loading || status == .unavailable
+    }
 }
 
 @_spi(Testing)

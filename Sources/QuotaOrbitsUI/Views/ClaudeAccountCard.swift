@@ -48,14 +48,18 @@ struct ClaudeAccountCard: View {
             Group {
                 if visualStyle == .orbits {
                     HStack(spacing: 4) {
-                        quotaGauge(window: "5 hours", quotaWindow: account.fiveHour, now: now)
+                        if account.showsFiveHour {
+                            quotaGauge(window: "5 hours", quotaWindow: account.fiveHour, now: now)
+                        }
                         quotaGauge(window: "7 days", quotaWindow: account.weekly, now: now)
                         ForEach(Array(account.scoped.enumerated()), id: \.offset) { _, scoped in
                             quotaGauge(window: scoped.label, quotaWindow: scoped.window, now: now)
                         }
                     }
                 } else {
-                    quotaGauge(window: "5 hours", quotaWindow: account.fiveHour, now: now)
+                    if account.showsFiveHour {
+                        quotaGauge(window: "5 hours", quotaWindow: account.fiveHour, now: now)
+                    }
                     quotaGauge(window: "7 days", quotaWindow: account.weekly, now: now)
                     ForEach(Array(account.scoped.enumerated()), id: \.offset) { _, scoped in
                         quotaGauge(window: scoped.label, quotaWindow: scoped.window, now: now)
@@ -69,6 +73,7 @@ struct ClaudeAccountCard: View {
         .frame(
             height: DashboardLayout.claudeAccountHeight(
                 scopedCount: account.scoped.count,
+                showsFiveHour: account.showsFiveHour,
                 visualStyle: visualStyle
             ),
             alignment: .top

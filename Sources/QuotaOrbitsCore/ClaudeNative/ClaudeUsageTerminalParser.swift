@@ -96,6 +96,7 @@ public struct ClaudeUsageTerminalParser: Sendable {
             withTemplate: " "
         )
         let safeTerminalPatterns = [
+            "\u{001B}\\]7501;\\?(?:\u{0007}|\u{001B}\\\\)",
             "\u{001B}\\](?:0|2);[^\u{0007}\u{001B}]*(?:\u{0007}|\u{001B}\\\\)",
             "\u{001B}\\[[0-?]*[ -/]*[@-~]",
             "\u{001B}[()][0-2A-Z]",

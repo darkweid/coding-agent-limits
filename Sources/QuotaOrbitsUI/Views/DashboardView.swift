@@ -21,11 +21,13 @@ public enum DashboardLayout {
 
     public static func claudeAccountHeight(
         scopedCount: Int,
+        showsFiveHour: Bool = true,
         visualStyle: QuotaVisualStyle = .bars
     ) -> CGFloat {
         switch visualStyle {
         case .bars:
             baseClaudeAccountHeight
+                - (showsFiveHour ? 0 : scopedQuotaRowHeight)
                 + CGFloat(min(max(scopedCount, 0), 1)) * scopedQuotaRowHeight
         case .orbits:
             orbitClaudeAccountHeight
@@ -34,23 +36,29 @@ public enum DashboardLayout {
 
     public static func requiredClaudeSectionHeight(
         scopedCounts: [Int],
+        hiddenFiveHourCount: Int = 0,
         visualStyle: QuotaVisualStyle = .bars
     ) -> CGFloat {
         let cards = scopedCounts.map {
             claudeAccountHeight(scopedCount: $0, visualStyle: visualStyle)
         }.reduce(0, +)
         let gaps = CGFloat(max(scopedCounts.count - 1, 0)) * cardSpacing
-        return cards + gaps
+        let hiddenHeight =
+            visualStyle == .bars
+            ? CGFloat(hiddenFiveHourCount) * scopedQuotaRowHeight : 0
+        return cards + gaps - hiddenHeight
     }
 
     public static func visibleClaudeSectionHeight(
         scopedCounts: [Int],
+        hiddenFiveHourCount: Int = 0,
         visualStyle: QuotaVisualStyle,
         claudeSourceMode: ClaudeSourceMode
     ) -> CGFloat {
         min(
             requiredClaudeSectionHeight(
                 scopedCounts: scopedCounts,
+                hiddenFiveHourCount: hiddenFiveHourCount,
                 visualStyle: visualStyle
             ),
             claudeSectionHeight(
@@ -200,6 +208,7 @@ struct DashboardContentView: View {
             .frame(
                 height: DashboardLayout.visibleClaudeSectionHeight(
                     scopedCounts: presentation.accounts.map(\.scoped.count),
+                    hiddenFiveHourCount: presentation.accounts.filter { !$0.showsFiveHour }.count,
                     visualStyle: visualStyle,
                     claudeSourceMode: claudeSourceMode
                 )

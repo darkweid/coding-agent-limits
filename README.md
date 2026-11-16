@@ -12,7 +12,7 @@ A lightweight macOS desktop widget for tracking Claude and Codex usage limits.
 
 ## What it shows
 
-- Claude 5-hour, 7-day, and scoped limits from either native Claude Code or every account available through `cswap`
+- Claude 5-hour (when available), 7-day, and scoped limits from either native Claude Code or every account available through `cswap`
 - Codex 5-hour and 7-day limits, plus the credits balance when available
 - Live reset countdowns, automatic refresh, and stale-data indicators
 - A green dot marking the active account for each provider

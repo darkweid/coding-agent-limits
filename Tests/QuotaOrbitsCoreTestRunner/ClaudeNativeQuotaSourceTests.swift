@@ -3,6 +3,28 @@ import Foundation
 
 enum ClaudeNativeQuotaSourceTests {
     static let cases: [TestCase] = [
+        TestCase(
+            name: "ClaudeNativeQuotaSourceTests.testUsageConversationCompletesWithoutSessionLimit"
+        ) {
+            var conversation = ClaudeUsageTerminalConversation()
+            _ = conversation.receive(Data("❯".utf8))
+            try TestSupport.assertEqual(
+                conversation.receive(
+                    Data(
+                        """
+                        Current week (all models)
+                        17% used
+                        Resets Aug 14 at 3am (UTC)
+                        Current week (Fable)
+                        8% used
+                        """.utf8)),
+                nil
+            )
+            try TestSupport.assertEqual(
+                conversation.receive(Data("Usage credits are off\nEsc to cancel".utf8)),
+                .usageComplete
+            )
+        },
         TestCase(name: "ClaudeNativeQuotaSourceTests.testUsageConversationWaitsForReadyPrompt") {
             var conversation = ClaudeUsageTerminalConversation()
 

@@ -141,10 +141,9 @@ public struct ClaudeUsageTerminalConversation: Sendable {
     }
 
     private static func hasCompleteUsageSummary(_ value: String) -> Bool {
-        value.contains("currentsession")
-            && value.contains("currentweekallmodels")
-            && value.components(separatedBy: "used").count >= 3
-            && value.components(separatedBy: "resets").count >= 3
+        (value.contains("currentsession") || value.contains("currentweekallmodels"))
+            && value.contains("used")
+            && value.contains("resets")
     }
 }
 
