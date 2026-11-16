@@ -259,7 +259,8 @@ enum PanelPreferencesTests {
         TestCase(name: "PanelPreferencesTests.testStyleChangeResizesPanelFromItsTopEdge") {
             try await withAsyncPreferences { preferences, _ in
                 preferences.visualStyle = .bars
-                let controller = makeController(preferences: preferences)
+                preferences.panelOrigin = CGPoint(x: 100, y: 500)
+                let controller = makeController(preferences: preferences, useSyntheticScreen: true)
                 defer { controller.close() }
                 let originalFrame = controller.panelFrameForTesting
 
@@ -280,7 +281,8 @@ enum PanelPreferencesTests {
             try await withAsyncPreferences { preferences, _ in
                 preferences.claudeSourceMode = .cswap
                 preferences.visualStyle = .orbits
-                let controller = makeController(preferences: preferences)
+                preferences.panelOrigin = CGPoint(x: 100, y: 500)
+                let controller = makeController(preferences: preferences, useSyntheticScreen: true)
                 defer { controller.close() }
                 let originalFrame = controller.panelFrameForTesting
 
@@ -495,7 +497,8 @@ enum PanelPreferencesTests {
 
     @MainActor
     private static func makeController(
-        preferences: PanelPreferences
+        preferences: PanelPreferences,
+        useSyntheticScreen: Bool = false
     ) -> DesktopPanelController {
         DesktopPanelController(
             coordinator: QuotaRefreshCoordinator(
@@ -509,7 +512,14 @@ enum PanelPreferencesTests {
                 openSettings: {},
                 quit: {}
             ),
-            preferences: preferences
+            preferences: preferences,
+            screenFrames: {
+                useSyntheticScreen
+                    ? [CGRect(x: 0, y: 0, width: 1_920, height: 1_080)]
+                    : NSScreen.screens.map(\.visibleFrame)
+            },
+            notificationCenter: NotificationCenter(),
+            screenChangeScheduler: ManualPanelScreenChangeScheduler()
         )
     }
 }
