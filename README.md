@@ -38,6 +38,8 @@ The app is installed to `~/Applications/Coding Agent Limits.app` and opens autom
 
 Right-click the widget to refresh it, move or pin it, open Settings, or quit. Settings let you choose native Claude Code or `cswap`, the refresh interval, used or remaining percentages, and the Bars or Orbits layout. Scroll the account list when more accounts are available.
 
+When unpinned, drag the top strip above the cards to reposition the widget.
+
 To open the widget again:
 
 ```bash
