@@ -69,6 +69,64 @@ enum PanelPreferencesTests {
                 try TestSupport.assertFalse(restored.isPinned)
             }
         },
+        TestCase(name: "PanelPreferencesTests.testBackgroundDragRespectsPinnedState") {
+            try await withPreferences { preferences, _ in
+                _ = NSApplication.shared
+                preferences.isPinned = false
+                let controller = makeController(preferences: preferences)
+                defer { controller.close() }
+                guard
+                    let panel = NSApplication.shared.windows.first(where: {
+                        $0.delegate === controller
+                    }) as? DesktopPanel,
+                    let contentView = panel.contentView
+                else {
+                    throw AssertionFailure(message: "Expected the dashboard panel content")
+                }
+
+                // Replace only the native drag loop, which requires live mouse input.
+                let dragWindow = RecordingDragWindow(
+                    contentRect: panel.frame,
+                    styleMask: [.borderless, .nonactivatingPanel],
+                    backing: .buffered,
+                    defer: false
+                )
+                dragWindow.isReleasedWhenClosed = false
+                dragWindow.contentView = contentView
+                defer {
+                    panel.contentView = contentView
+                    dragWindow.close()
+                }
+                guard
+                    let event = NSEvent.mouseEvent(
+                        with: .leftMouseDown,
+                        location: CGPoint(x: 30, y: panel.frame.height - 18),
+                        modifierFlags: [],
+                        timestamp: 0,
+                        windowNumber: dragWindow.windowNumber,
+                        context: nil,
+                        eventNumber: 1,
+                        clickCount: 1,
+                        pressure: 1
+                    )
+                else {
+                    throw AssertionFailure(message: "Could not create a dashboard mouse event")
+                }
+
+                dragWindow.isMovableByWindowBackground = true
+                dragWindow.sendEvent(event)
+                try TestSupport.assertEqual(dragWindow.dragEvents.count, 1)
+                try TestSupport.assertTrue(dragWindow.dragEvents.last === event)
+
+                dragWindow.isMovableByWindowBackground = false
+                dragWindow.sendEvent(event)
+                try TestSupport.assertEqual(dragWindow.dragEvents.count, 1)
+
+                dragWindow.isMovableByWindowBackground = true
+                dragWindow.sendEvent(event)
+                try TestSupport.assertEqual(dragWindow.dragEvents.count, 2)
+            }
+        },
         TestCase(name: "PanelPreferencesTests.testExecutablePathsRoundTripUnderStableKeys") {
             try await withPreferences { preferences, defaults in
                 preferences.cswapPath = "/approved/cswap"
@@ -537,6 +595,15 @@ private struct UnusedCodexQuotaSource: CodexQuotaFetching {
 }
 
 private struct UnusedQuotaSourceError: Error {}
+
+@MainActor
+private final class RecordingDragWindow: DesktopPanel {
+    var dragEvents: [NSEvent] = []
+
+    override func performDrag(with event: NSEvent) {
+        dragEvents.append(event)
+    }
+}
 
 @MainActor
 private final class MutableScreenFrames {

@@ -3,9 +3,25 @@ import Combine
 import QuotaOrbitsCore
 import SwiftUI
 
-private final class DesktopPanel: NSPanel {
-    override var canBecomeKey: Bool { false }
-    override var canBecomeMain: Bool { false }
+@_spi(Testing)
+open class DesktopPanel: NSPanel {
+    public override var canBecomeKey: Bool { false }
+    public override var canBecomeMain: Bool { false }
+
+    public override func sendEvent(_ event: NSEvent) {
+        let headerHeight =
+            DashboardLayout.padding + DashboardLayout.headerHeight + DashboardLayout.cardSpacing
+        if event.type == .leftMouseDown,
+            !event.modifierFlags.contains(.control),
+            isMovableByWindowBackground,
+            event.locationInWindow.y >= frame.height - headerHeight
+        {
+            // Start the native drag before SwiftUI's context-menu gestures consume the click.
+            performDrag(with: event)
+            return
+        }
+        super.sendEvent(event)
+    }
 }
 
 @_spi(Testing)
